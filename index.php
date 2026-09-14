@@ -1,5 +1,7 @@
 <?php
-session_start();
+require_once __DIR__ . '/security.php';
+adevtools_start_session();
+adevtools_security_headers();
 require_once __DIR__ . '/auth-helpers.php';
 $currentUser = currentUser();
 
@@ -12,6 +14,8 @@ if (in_array($requestedPage, $guestPages, true)) {
     if ($currentUser) { header('Location: ?page=dashboard'); exit; }
     $page = $requestedPage;
     $cssVersion = file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : time();
+    $i18nVersion = file_exists(__DIR__ . '/assets/js/i18n.js') ? filemtime(__DIR__ . '/assets/js/i18n.js') : time();
+    $pwaVersion  = file_exists(__DIR__ . '/assets/js/pwa.js') ? filemtime(__DIR__ . '/assets/js/pwa.js') : time();
     require __DIR__ . '/guest.php';
     exit;
 }
@@ -39,6 +43,8 @@ $experienceLabels = array('beginner' => 'Beginner', 'intermediate' => 'Intermedi
 $experienceLabel = isset($experienceLabels[$experienceLevel]) ? $experienceLabels[$experienceLevel] : 'Set level';
 $cssVersion = file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : time();
 $jsVersion  = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : time();
+$i18nVersion = file_exists(__DIR__ . '/assets/js/i18n.js') ? filemtime(__DIR__ . '/assets/js/i18n.js') : time();
+$pwaVersion  = file_exists(__DIR__ . '/assets/js/pwa.js') ? filemtime(__DIR__ . '/assets/js/pwa.js') : time();
 function e($value) { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
 $icons = array(
     'dashboard' => 'bx bx-grid-alt',
@@ -58,6 +64,13 @@ $icons = array(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#111214">
 <title>A-DevTools — Personal Development Tool</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="A-DevTools">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/boxicons/2.1.4/css/boxicons.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
@@ -68,29 +81,45 @@ $icons = array(
 <a href="#mainContent" class="skip-link">Skip to main content</a>
 <div class="app-shell">
     <header class="topbar">
-        <button class="icon-btn" id="sidebarToggle" title="Toggle sidebar" aria-label="Toggle sidebar"><i class="bx bx-menu"></i></button>
+        <button class="icon-btn" id="sidebarToggle" title="Toggle sidebar" aria-label="Toggle sidebar" data-i18n-title="topbar.sidebarToggle"><i class="bx bx-menu"></i></button>
         <a class="brand" href="?page=dashboard" aria-label="A-DevTools home"><span class="brand-mark"><i class="bx bx-code-alt"></i></span><span>A-DevTools</span></a>
         <div class="topbar-search" id="topbarSearch">
             <i class="bx bx-search"></i>
-            <input id="globalSearch" placeholder="Search projects, snippets, notes..." autocomplete="off" aria-label="Global search">
+            <input id="globalSearch" placeholder="Search projects, snippets, notes..." autocomplete="off" aria-label="Global search" data-i18n-placeholder="topbar.searchPlaceholder">
             <kbd>Ctrl K</kbd>
         </div>
         <div class="top-actions">
-            <button class="icon-btn mobile-only" id="mobileSearchToggle" title="Search" aria-label="Open search"><i class="bx bx-search"></i></button>
+            <button class="icon-btn mobile-only" id="mobileSearchToggle" title="Search" aria-label="Open search" data-i18n-title="topbar.search"><i class="bx bx-search"></i></button>
             <div class="text-size-group" role="group" aria-label="Text size">
-                <button class="icon-btn" id="textSizeDown" title="Decrease text size" aria-label="Decrease text size"><i class="bx bx-minus"></i></button>
-                <button class="icon-btn" id="textSizeUp" title="Increase text size" aria-label="Increase text size"><i class="bx bx-plus"></i></button>
+                <button class="icon-btn" id="textSizeDown" title="Decrease text size" aria-label="Decrease text size" data-i18n-title="topbar.textDown"><i class="bx bx-minus"></i></button>
+                <button class="icon-btn" id="textSizeUp" title="Increase text size" aria-label="Increase text size" data-i18n-title="topbar.textUp"><i class="bx bx-plus"></i></button>
             </div>
-            <button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle dark mode"><i class="bx bx-moon"></i></button>
+            <button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle dark mode" data-i18n-title="topbar.theme"><i class="bx bx-moon"></i></button>
             <button class="pill-btn" id="experienceBtn" title="Change experience level" aria-label="Change experience level"><i class="bx bx-user-voice"></i><span id="experienceBtnLabel"><?php echo e($experienceLabel); ?></span></button>
-            <button class="icon-btn" id="helpBtn" title="Help & guided tour" aria-label="Help and guided tour"><i class="bx bx-help-circle"></i></button>
-            <button class="icon-btn" id="notificationBtn" title="Activity" aria-label="View recent activity"><i class="bx bx-bell"></i></button>
+            <div class="lang-picker" id="langPicker">
+                <button type="button" class="pill-btn lang-btn" id="langBtn" title="Change language" aria-label="Change language" aria-haspopup="true" aria-expanded="false" data-i18n-title="lang.picker">
+                    <span class="lang-icon">A</span><span id="langCode">EN</span><i class="bx bx-chevron-down"></i>
+                </button>
+                <div class="lang-dropdown" id="langDropdown" role="menu" hidden>
+                    <button type="button" class="lang-option active" data-lang="en" role="menuitem"><span class="lang-flag">🇬🇧</span> English</button>
+                    <button type="button" class="lang-option" data-lang="es" role="menuitem"><span class="lang-flag">🇪🇸</span> Español</button>
+                    <button type="button" class="lang-option" data-lang="fr" role="menuitem"><span class="lang-flag">🇫🇷</span> Français</button>
+                    <button type="button" class="lang-option" data-lang="de" role="menuitem"><span class="lang-flag">🇩🇪</span> Deutsch</button>
+                    <button type="button" class="lang-option" data-lang="tl" role="menuitem"><span class="lang-flag">🇵🇭</span> Filipino</button>
+                </div>
+            </div>
+            <button type="button" class="pill-btn install-btn" id="pwaInstallBtn" title="Install A-DevTools as an app" aria-label="Install A-DevTools as an app" data-i18n-title="pwa.installTitle">
+                <i class="bx bx-download"></i><span class="pwa-install-label" data-i18n="pwa.install">Install App</span>
+            </button>
+            <button type="button" class="icon-btn apk-btn" id="apkDownloadBtn" title="Download Android APK" aria-label="Download Android APK" data-i18n-title="pwa.apkTitle"><i class="bx bx-cloud-download"></i></button>
+            <button class="icon-btn" id="helpBtn" title="Help & guided tour" aria-label="Help and guided tour" data-i18n-title="topbar.help"><i class="bx bx-help-circle"></i></button>
+            <button class="icon-btn" id="notificationBtn" title="Activity" aria-label="View recent activity" data-i18n-title="topbar.activity"><i class="bx bx-bell"></i></button>
             <div class="account-menu" id="accountMenu">
                 <button class="avatar" id="accountMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account menu"><?php echo e(strtoupper(substr($currentUser['name'], 0, 1))); ?></button>
                 <div class="account-dropdown" id="accountDropdown" hidden>
                     <div class="account-dropdown-name"><?php echo e($currentUser['name']); ?></div>
                     <div class="account-dropdown-email muted"><?php echo e($currentUser['email']); ?></div>
-                    <button class="ghost-btn account-logout" id="logoutBtn"><i class="bx bx-log-out"></i> Log out</button>
+                    <button class="ghost-btn account-logout" id="logoutBtn"><i class="bx bx-log-out"></i> <span data-i18n="topbar.logout">Log out</span></button>
                 </div>
             </div>
         </div>
@@ -105,23 +134,23 @@ $icons = array(
 
     <aside class="sidebar" id="sidebar" role="navigation" aria-label="Workspace navigation">
         <div class="side-section">
-            <div class="side-label">WORKSPACE</div>
+            <div class="side-label" data-i18n="side.workspace">WORKSPACE</div>
             <?php foreach ($pages as $key => $label): ?>
                 <a class="nav-item <?php echo $page === $key ? 'active' : ''; ?>" href="?page=<?php echo e($key); ?>" title="<?php echo e($label); ?>"<?php echo $page === $key ? ' aria-current="page"' : ''; ?>>
                     <span class="nav-icon"><i class="<?php echo e($icons[$key === 'ui-guide' ? 'guide' : $key]); ?>"></i></span>
-                    <span class="nav-text"><?php echo e($label); ?></span>
+                    <span class="nav-text" data-i18n="nav.<?php echo e($key); ?>"><?php echo e($label); ?></span>
                 </a>
             <?php endforeach; ?>
         </div>
         <div class="side-section">
-            <div class="side-label">QUICK TOOLS</div>
-            <button class="nav-item" id="quickCommand" title="Command Palette"><span class="nav-icon"><i class="bx bx-command"></i></span><span class="nav-text">Command Palette</span><kbd>Ctrl K</kbd></button>
-            <button class="nav-item" id="newProject" title="New Project"><span class="nav-icon"><i class="bx bx-plus"></i></span><span class="nav-text">New Project</span></button>
+            <div class="side-label" data-i18n="side.quickTools">QUICK TOOLS</div>
+            <button class="nav-item" id="quickCommand" title="Command Palette"><span class="nav-icon"><i class="bx bx-command"></i></span><span class="nav-text" data-i18n="qt.commandPalette">Command Palette</span><kbd>Ctrl K</kbd></button>
+            <button class="nav-item" id="newProject" title="New Project"><span class="nav-icon"><i class="bx bx-plus"></i></span><span class="nav-text" data-i18n="qt.newProject">New Project</span></button>
             <?php if ($experienceLevel === null || $experienceLevel === 'beginner'): ?>
-            <button class="nav-item" id="quickTour" title="Guided Tour"><span class="nav-icon"><i class="bx bx-compass"></i></span><span class="nav-text">Guided Tour</span></button>
+            <button class="nav-item" id="quickTour" title="Guided Tour"><span class="nav-icon"><i class="bx bx-compass"></i></span><span class="nav-text" data-i18n="qt.guidedTour">Guided Tour</span></button>
             <?php endif; ?>
         </div>
-        <div class="sidebar-bottom"><span class="status-dot"></span><span>Local workspace · <?php echo e($experienceLabel); ?></span></div>
+        <div class="sidebar-bottom"><span class="status-dot"></span><span><span data-i18n="side.localWorkspace">Local workspace</span> · <?php echo e($experienceLabel); ?></span></div>
     </aside>
 
     <main class="main" id="mainContent" tabindex="-1">
@@ -153,53 +182,53 @@ $icons = array(
         </div>
         <?php endif; ?>
         <?php if ($page === 'dashboard' && $experienceLevel === 'professional'): ?>
-            <section class="page-head"><div><div class="eyebrow">WORKSPACE</div><h1>Dashboard</h1><p>Projects, snippets, notes and the playground, in one local workspace.</p></div><button class="primary-btn" id="newProjectHero"><i class="bx bx-plus"></i> New Project</button></section>
+            <section class="page-head"><div><div class="eyebrow" data-i18n="dash.pro.eyebrow">WORKSPACE</div><h1 data-i18n="dash.pro.title">Dashboard</h1><p data-i18n="dash.pro.subtitle">Projects, snippets, notes and the playground, in one local workspace.</p></div><button class="primary-btn" id="newProjectHero"><i class="bx bx-plus"></i> <span data-i18n="common.newProject">New Project</span></button></section>
             <div class="stats-grid">
-                <div class="stat-card"><span>Projects</span><strong id="projectCount">0</strong><small>saved locally</small></div>
-                <div class="stat-card"><span>Snippets</span><strong id="snippetCount">0</strong><small>code references</small></div>
-                <div class="stat-card"><span>Notes</span><strong id="noteCount">0</strong><small>development notes</small></div>
-                <div class="stat-card"><span>Storage</span><strong>Local</strong><small>browser storage</small></div>
+                <div class="stat-card"><span data-i18n="stat.projects">Projects</span><strong id="projectCount">0</strong><small data-i18n="stat.projectsDesc">saved locally</small></div>
+                <div class="stat-card"><span data-i18n="stat.snippets">Snippets</span><strong id="snippetCount">0</strong><small data-i18n="stat.snippetsDesc">code references</small></div>
+                <div class="stat-card"><span data-i18n="stat.notes">Notes</span><strong id="noteCount">0</strong><small data-i18n="stat.notesDesc">development notes</small></div>
+                <div class="stat-card"><span data-i18n="stat.storage">Storage</span><strong data-i18n="stat.local">Local</strong><small data-i18n="stat.storageDesc">browser storage</small></div>
             </div>
             <div class="grid-2">
                 <section class="panel"><div class="panel-head"><h2>Shortcuts</h2><span class="muted"><kbd>Ctrl K</kbd> for command palette</span></div><div class="quick-grid">
-                    <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span>Code Playground</span><small>Write and preview HTML/CSS/JS</small></a>
-                    <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span>UI Components</span><small>Reusable interface patterns</small></a>
-                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span>Snippets</span><small>Save frequently used code</small></a>
-                    <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span>Development Notes</span><small>Keep ideas and references</small></a>
+                    <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
+                    <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
+                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
+                    <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
                 </div></section>
                 <section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section>
             </div>
         <?php elseif ($page === 'dashboard' && $experienceLevel === 'intermediate'): ?>
             <section class="hero">
-                <div><div class="eyebrow">PERSONAL DEVELOPMENT WORKSPACE</div><h1>Build. Test. Learn. Ship.</h1><p>Jump back into your projects, snippets and notes, or open the Playground to keep experimenting.</p></div>
-                <button class="primary-btn" id="newProjectHero"><i class="bx bx-plus"></i> New Project</button>
+                <div><div class="eyebrow" data-i18n="dash.hero.eyebrow">PERSONAL DEVELOPMENT WORKSPACE</div><h1 data-i18n="dash.hero.title">Build. Test. Learn. Ship.</h1><p data-i18n="dash.inter.subtitle">Jump back into your projects, snippets and notes, or open the Playground to keep experimenting.</p></div>
+                <button class="primary-btn" id="newProjectHero"><i class="bx bx-plus"></i> <span data-i18n="common.newProject">New Project</span></button>
             </section>
             <div class="stats-grid">
-                <div class="stat-card"><span>Projects</span><strong id="projectCount">0</strong><small>saved locally</small></div>
-                <div class="stat-card"><span>Snippets</span><strong id="snippetCount">0</strong><small>code references</small></div>
-                <div class="stat-card"><span>Notes</span><strong id="noteCount">0</strong><small>development notes</small></div>
-                <div class="stat-card"><span>Storage</span><strong>Local</strong><small>browser storage</small></div>
+                <div class="stat-card"><span data-i18n="stat.projects">Projects</span><strong id="projectCount">0</strong><small data-i18n="stat.projectsDesc">saved locally</small></div>
+                <div class="stat-card"><span data-i18n="stat.snippets">Snippets</span><strong id="snippetCount">0</strong><small data-i18n="stat.snippetsDesc">code references</small></div>
+                <div class="stat-card"><span data-i18n="stat.notes">Notes</span><strong id="noteCount">0</strong><small data-i18n="stat.notesDesc">development notes</small></div>
+                <div class="stat-card"><span data-i18n="stat.storage">Storage</span><strong data-i18n="stat.local">Local</strong><small data-i18n="stat.storageDesc">browser storage</small></div>
             </div>
             <div class="grid-2">
                 <section class="panel"><div class="panel-head"><h2>Quick start</h2></div><div class="quick-grid">
-                    <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span>Code Playground</span><small>Write and preview HTML/CSS/JS</small></a>
-                    <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span>UI Components</span><small>Reusable interface patterns</small></a>
-                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span>Snippets</span><small>Save frequently used code</small></a>
-                    <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span>Development Notes</span><small>Keep ideas and references</small></a>
+                    <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
+                    <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
+                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
+                    <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
                 </div></section>
                 <section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section>
             </div>
             <section class="panel"><div class="panel-head"><h2>Need a refresher?</h2></div><p class="muted">Replay the guided tour or revisit the beginner steps anytime from <a class="text-link" href="?page=settings">Settings</a>.</p></section>
         <?php elseif ($page === 'dashboard'): ?>
             <section class="hero">
-                <div><div class="eyebrow">PERSONAL DEVELOPMENT WORKSPACE</div><h1>Build. Test. Learn. Ship.</h1><p>A self-hosted workspace for organizing code, UI experiments, reusable snippets, projects and development notes.</p></div>
-                <button class="primary-btn" id="newProjectHero"><i class="bx bx-plus"></i> New Project</button>
+                <div><div class="eyebrow" data-i18n="dash.hero.eyebrow">PERSONAL DEVELOPMENT WORKSPACE</div><h1 data-i18n="dash.hero.title">Build. Test. Learn. Ship.</h1><p data-i18n="dash.beg.subtitle">A self-hosted workspace for organizing code, UI experiments, reusable snippets, projects and development notes.</p></div>
+                <button class="primary-btn" id="newProjectHero"><i class="bx bx-plus"></i> <span data-i18n="common.newProject">New Project</span></button>
             </section>
             <div class="stats-grid">
-                <div class="stat-card"><span>Projects</span><strong id="projectCount">0</strong><small>saved locally</small></div>
-                <div class="stat-card"><span>Snippets</span><strong id="snippetCount">0</strong><small>code references</small></div>
-                <div class="stat-card"><span>Notes</span><strong id="noteCount">0</strong><small>development notes</small></div>
-                <div class="stat-card"><span>Storage</span><strong>Local</strong><small>browser storage</small></div>
+                <div class="stat-card"><span data-i18n="stat.projects">Projects</span><strong id="projectCount">0</strong><small data-i18n="stat.projectsDesc">saved locally</small></div>
+                <div class="stat-card"><span data-i18n="stat.snippets">Snippets</span><strong id="snippetCount">0</strong><small data-i18n="stat.snippetsDesc">code references</small></div>
+                <div class="stat-card"><span data-i18n="stat.notes">Notes</span><strong id="noteCount">0</strong><small data-i18n="stat.notesDesc">development notes</small></div>
+                <div class="stat-card"><span data-i18n="stat.storage">Storage</span><strong data-i18n="stat.local">Local</strong><small data-i18n="stat.storageDesc">browser storage</small></div>
             </div>
             <section class="panel getting-started" id="gettingStarted">
                 <div class="panel-head">
@@ -215,17 +244,17 @@ $icons = array(
             </section>
             <div class="grid-2">
                 <section class="panel"><div class="panel-head"><h2>Quick start</h2></div><div class="quick-grid">
-                    <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span>Code Playground</span><small>Write and preview HTML/CSS/JS</small></a>
-                    <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span>UI Components</span><small>Reusable interface patterns</small></a>
-                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span>Snippets</span><small>Save frequently used code</small></a>
-                    <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span>Development Notes</span><small>Keep ideas and references</small></a>
+                    <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
+                    <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
+                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
+                    <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
                 </div></section>
                 <section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section>
             </div>
         <?php elseif ($page === 'code'): ?>
             <section class="page-head playground-head">
-                <div><div class="eyebrow">LEARN · BUILD · RUN</div><h1>Code Playground</h1><p>New to coding? Follow the 4 steps below. You can change the example safely and see the result immediately.</p></div>
-                <div class="playground-actions"><span class="run-status" id="runStatus"><i></i> Ready</span><button class="ghost-btn" id="resetCode"><i class="bx bx-reset"></i> Reset</button><button class="primary-btn" id="runCode"><i class="bx bx-play"></i> Run my code</button></div>
+                <div><div class="eyebrow" data-i18n="code.eyebrow">LEARN · BUILD · RUN</div><h1 data-i18n="code.title">Code Playground</h1><p data-i18n="code.subtitle">New to coding? Follow the 4 steps below. You can change the example safely and see the result immediately.</p></div>
+                <div class="playground-actions"><span class="run-status" id="runStatus"><i></i> Ready</span><button class="ghost-btn" id="resetCode"><i class="bx bx-reset"></i> <span data-i18n="code.reset">Reset</span></button><button class="primary-btn" id="runCode"><i class="bx bx-play"></i> <span data-i18n="code.run">Run my code</span></button></div>
             </section>
             <section class="beginner-guide panel" id="playgroundGuide">
                 <div class="guide-intro"><div><span class="section-kicker">BEGINNER GUIDE</span><h2>Your first playground test</h2><p>You do not need to understand everything at once. Start with the HTML, change one word, press <b>Run my code</b>, then check the preview.</p></div><button class="small-btn guide-toggle" data-target="playgroundGuideSteps"><i class="bx bx-chevron-up"></i> Hide guide</button></div>
@@ -274,7 +303,7 @@ button:hover{transform:translateY(-1px)}</textarea>
                 </div>
             </div>
         <?php elseif ($page === 'components'): ?>
-            <section class="page-head"><div><div class="eyebrow">UI LIBRARY</div><h1>UI Components</h1><p>Practical HTML5/CSS3 patterns you can reuse in your projects.</p></div></section>
+            <section class="page-head"><div><div class="eyebrow" data-i18n="components.eyebrow">UI LIBRARY</div><h1 data-i18n="components.title">UI Components</h1><p data-i18n="components.subtitle">Practical HTML5/CSS3 patterns you can reuse in your projects.</p></div></section>
             <div class="component-grid">
                 <section class="panel"><h2>Buttons</h2><div class="demo-row"><button class="primary-btn">Primary</button><button class="ghost-btn">Secondary</button><button class="danger-btn">Danger</button></div></section>
                 <section class="panel"><h2>Form controls</h2><label>Project name<input class="input" placeholder="My project"></label><label>Technology<select class="input"><option>Native PHP</option><option>JavaScript</option><option>HTML5 / CSS3</option></select></label></section>
@@ -331,11 +360,11 @@ button:hover{transform:translateY(-1px)}</textarea>
                 <div id="snippetGrid" class="snippet-grid"></div>
             </section>
         <?php elseif ($page === 'projects'): ?>
-            <section class="page-head"><div><div class="eyebrow">WORKSPACE</div><h1>Projects</h1><p>Track your personal development projects and ideas.</p></div><button class="primary-btn" id="newProjectPage"><i class="bx bx-plus"></i> New Project</button></section><div id="projectGrid" class="project-grid"></div>
+            <section class="page-head"><div><div class="eyebrow" data-i18n="projects.eyebrow">WORKSPACE</div><h1 data-i18n="projects.title">Projects</h1><p data-i18n="projects.subtitle">Track your personal development projects and ideas.</p></div><button class="primary-btn" id="newProjectPage"><i class="bx bx-plus"></i> <span data-i18n="common.newProject">New Project</span></button></section><div id="projectGrid" class="project-grid"></div>
         <?php elseif ($page === 'notes'): ?>
-            <section class="page-head"><div><div class="eyebrow">KNOWLEDGE</div><h1>Development Notes</h1><p>Keep technical notes without leaving your workspace.</p></div><button class="primary-btn" id="addNote"><i class="bx bx-plus"></i> Add Note</button></section><div id="noteGrid" class="note-grid"></div>
+            <section class="page-head"><div><div class="eyebrow" data-i18n="notes.eyebrow">KNOWLEDGE</div><h1 data-i18n="notes.title">Development Notes</h1><p data-i18n="notes.subtitle">Keep technical notes without leaving your workspace.</p></div><button class="primary-btn" id="addNote"><i class="bx bx-plus"></i> <span data-i18n="common.addNote">Add Note</span></button></section><div id="noteGrid" class="note-grid"></div>
         <?php elseif ($page === 'ui-guide'): ?>
-            <section class="page-head"><div><div class="eyebrow">REFERENCE</div><h1>UI/UX Guide</h1><p>Use these patterns as a practical guide while building Native PHP interfaces.</p></div></section>
+            <section class="page-head"><div><div class="eyebrow" data-i18n="uiGuide.eyebrow">REFERENCE</div><h1 data-i18n="uiGuide.title">UI/UX Guide</h1><p data-i18n="uiGuide.subtitle">Use these patterns as a practical guide while building Native PHP interfaces.</p></div></section>
             <div class="guide-layout"><nav class="guide-nav panel"><strong>Guide sections</strong><a href="#shell">Application shell</a><a href="#layout">Layout</a><a href="#forms">Forms</a><a href="#tables">Tables</a><a href="#responsive">Responsive</a></nav><div class="guide-content">
                 <section class="guide-section panel" id="shell"><span class="section-kicker">01 · SHELL</span><h2>Keep navigation predictable</h2><p class="muted">Use a stable topbar, one primary sidebar and a focused content area. Hide secondary navigation on small screens rather than squeezing everything into one row.</p><div class="wireframe"><div class="wf-top">TOP NAVIGATION</div><div class="wf-body"><div class="wf-side">Dashboard<br>Projects<br>Snippets<br>Notes<br>Settings</div><div class="wf-main">Page heading<br><br>Primary content</div></div></div></section>
                 <section class="guide-section panel" id="layout"><span class="section-kicker">02 · LAYOUT</span><h2>Build with reusable regions</h2><div class="guide-cards"><div class="guide-demo-card"><b>Cards</b><span>Use consistent padding, borders and spacing for independent content.</span></div><div class="guide-demo-card"><b>Toolbar</b><span>Keep search, filters and actions together above dense content.</span></div><div class="guide-demo-card"><b>Hierarchy</b><span>Use eyebrow → heading → supporting text before the main action.</span></div></div></section>
@@ -344,8 +373,8 @@ button:hover{transform:translateY(-1px)}</textarea>
                 <section class="guide-section panel" id="responsive"><span class="section-kicker">05 · RESPONSIVE</span><h2>Design for the narrow screen first</h2><ul class="guide-list"><li>Use CSS Grid with <code>minmax()</code> or <code>auto-fit</code> for cards.</li><li>Allow tables to scroll horizontally instead of breaking the page.</li><li>Collapse or slide the sidebar below the desktop breakpoint.</li><li>Keep touch targets comfortable and avoid tiny controls.</li></ul></section>
             </div></div>
         <?php else: ?>
-            <section class="page-head"><div><div class="eyebrow">CONFIGURATION</div><h1>Settings</h1><p>Configure the local development workspace.</p></div></section>
-            <div class="settings-grid"><section class="panel"><h2>Appearance</h2><label class="switch-row">Dark mode <input type="checkbox" id="darkSetting"><span class="switch"></span></label><p class="muted">Theme is stored locally in your browser.</p><label class="switch-row">Reset text size <button class="small-btn" id="resetTextSize">Reset to default</button></label><p class="muted">Use the A− / A+ buttons in the top bar any time to make text easier to read.</p></section><section class="panel"><h2>Experience level</h2><p class="muted">Current level: <span class="experience-badge" id="experienceBadge">Not set</span></p><p class="muted">This decides how much guidance is shown across the workspace.</p><button class="ghost-btn" id="changeExperienceBtn"><i class="bx bx-user-check"></i> Change experience level</button><button class="ghost-btn" id="replayTour"><i class="bx bx-play"></i> Replay guided tour</button></section><section class="panel" id="localDiskBackup"><h2>Local disk backup</h2><p class="muted">Every project, snippet and note is mirrored to a dedicated folder on this computer — a Desktop folder by default — so your work lives on disk, not only inside the browser.</p><div class="disk-status" id="diskStatusBody"><p class="muted">Checking local save status…</p></div><div class="disk-actions"><button class="ghost-btn" id="saveBackupBtn"><i class="bx bx-save"></i> Save backup to disk now</button><button class="ghost-btn" id="downloadBackupBtn"><i class="bx bx-download"></i> Download backup file</button></div><div class="form-grid" style="margin-top:14px"><label class="full">Save location<input id="dataLocationInput" class="input" placeholder="Loading default location…"></label></div><p class="muted">Leave blank to use the automatic default (a dedicated <code>A-DevTools-Data</code> folder on your Desktop, created for you the first time this runs), or enter a relative folder name (e.g. <code>my-backups</code>) or a full path (e.g. <code>D:/A-DevTools-Data</code>) to save somewhere else instead. Existing files are not moved automatically.</p><div class="disk-actions"><button class="ghost-btn" id="saveLocationBtn"><i class="bx bx-folder"></i> Save location</button><button class="ghost-btn" id="resetLocationBtn"><i class="bx bx-reset"></i> Reset to default</button></div><hr style="border:0;border-top:1px solid var(--border,#e5e7eb);margin:16px 0"><p class="muted"><b>Export / Import</b> — move your workspace to another computer, or restore an older copy.</p><div class="disk-actions"><button class="ghost-btn" id="importBackupBtn"><i class="bx bx-upload"></i> Import backup file</button><input type="file" id="importBackupInput" accept="application/json,.json" hidden></div></section><section class="panel"><h2>Workspace data</h2><p class="muted">Projects, snippets and notes are stored in localStorage and mirrored to disk automatically. No external service is required.</p><button class="danger-btn" id="clearData">Clear local data</button></section></div>
+            <section class="page-head"><div><div class="eyebrow" data-i18n="settings.eyebrow">CONFIGURATION</div><h1 data-i18n="settings.title">Settings</h1><p data-i18n="settings.subtitle">Configure the local development workspace.</p></div></section>
+            <div class="settings-grid"><section class="panel"><h2 data-i18n="settings.appearance">Appearance</h2><label class="switch-row"><span data-i18n="settings.darkMode">Dark mode</span> <input type="checkbox" id="darkSetting"><span class="switch"></span></label><p class="muted" data-i18n="settings.themeNote">Theme is stored locally in your browser.</p><label class="switch-row"><span data-i18n="settings.resetTextSize">Reset text size</span> <button class="small-btn" id="resetTextSize" data-i18n="settings.resetToDefault">Reset to default</button></label><p class="muted" data-i18n="settings.textSizeNote">Use the A− / A+ buttons in the top bar any time to make text easier to read.</p></section><section class="panel"><h2 data-i18n="settings.experienceLevel">Experience level</h2><p class="muted"><span data-i18n="settings.currentLevel">Current level:</span> <span class="experience-badge" id="experienceBadge">Not set</span></p><p class="muted" data-i18n="settings.experienceNote">This decides how much guidance is shown across the workspace.</p><button class="ghost-btn" id="changeExperienceBtn"><i class="bx bx-user-check"></i> <span data-i18n="settings.changeExperience">Change experience level</span></button><button class="ghost-btn" id="replayTour"><i class="bx bx-play"></i> <span data-i18n="settings.replayTour">Replay guided tour</span></button></section><section class="panel" id="localDiskBackup"><h2 data-i18n="settings.localBackup">Local disk backup</h2><p class="muted">Every project, snippet and note is mirrored to a dedicated folder on this computer — a Desktop folder by default — so your work lives on disk, not only inside the browser.</p><div class="disk-status" id="diskStatusBody"><p class="muted">Checking local save status…</p></div><div class="disk-actions"><button class="ghost-btn" id="saveBackupBtn"><i class="bx bx-save"></i> <span data-i18n="settings.saveBackupNow">Save backup to disk now</span></button><button class="ghost-btn" id="downloadBackupBtn"><i class="bx bx-download"></i> <span data-i18n="settings.downloadBackupFile">Download backup file</span></button></div><div class="form-grid" style="margin-top:14px"><label class="full">Save location<input id="dataLocationInput" class="input" placeholder="Loading default location…"></label></div><p class="muted">Leave blank to use the automatic default (a dedicated <code>A-DevTools-Data</code> folder on your Desktop, created for you the first time this runs), or enter a relative folder name (e.g. <code>my-backups</code>) or a full path (e.g. <code>D:/A-DevTools-Data</code>) to save somewhere else instead. Existing files are not moved automatically.</p><div class="disk-actions"><button class="ghost-btn" id="saveLocationBtn"><i class="bx bx-folder"></i> <span data-i18n="settings.saveLocation">Save location</span></button><button class="ghost-btn" id="resetLocationBtn"><i class="bx bx-reset"></i> <span data-i18n="settings.resetLocation">Reset to default</span></button></div><hr style="border:0;border-top:1px solid var(--border,#e5e7eb);margin:16px 0"><p class="muted"><b>Export / Import</b> — move your workspace to another computer, or restore an older copy.</p><div class="disk-actions"><button class="ghost-btn" id="importBackupBtn"><i class="bx bx-upload"></i> <span data-i18n="settings.importBackup">Import backup file</span></button><input type="file" id="importBackupInput" accept="application/json,.json" hidden></div></section><section class="panel"><h2 data-i18n="settings.workspaceData">Workspace data</h2><p class="muted">Projects, snippets and notes are stored in localStorage and mirrored to disk automatically. No external service is required.</p><button class="danger-btn" id="clearData" data-i18n="settings.clearData">Clear local data</button></section></div>
         <?php endif; ?>
         </div>
     </main>
@@ -363,6 +392,9 @@ button:hover{transform:translateY(-1px)}</textarea>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/2.0.3/beautify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/2.0.3/beautify-css.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/2.0.3/beautify-html.min.js"></script>
+<script>window.CSRF_TOKEN = <?php echo json_encode(csrf_token()); ?>;</script>
 <script src="assets/js/app.js?v=<?php echo $jsVersion; ?>"></script>
+<script src="assets/js/i18n.js?v=<?php echo $i18nVersion; ?>"></script>
+<script src="assets/js/pwa.js?v=<?php echo $pwaVersion; ?>"></script>
 </body>
 </html>

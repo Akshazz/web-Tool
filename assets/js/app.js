@@ -13,12 +13,13 @@ function renderActivity(){const el=$('#activityList');if(!el)return;const a=stor
    writes a real file into the data/ folder next to this app on disk. That
    way "your data" is never only inside the browser. */
 const DISK_ENDPOINT='save-data.php';
+const CSRF_TOKEN=typeof window!=='undefined'&&window.CSRF_TOKEN?window.CSRF_TOKEN:null;
 function diskSaveItem(type,item){
   if(!item)return;
-  fetch(DISK_ENDPOINT+'?action=save-item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,item})}).catch(()=>{});
+  fetch(DISK_ENDPOINT+'?action=save-item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,item,csrf:CSRF_TOKEN})}).catch(()=>{});
 }
 function diskDeleteItem(type,id){
-  fetch(DISK_ENDPOINT+'?action=delete-item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,id})}).catch(()=>{});
+  fetch(DISK_ENDPOINT+'?action=delete-item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,id,csrf:CSRF_TOKEN})}).catch(()=>{});
 }
 function collectSnapshot(){
   return{projects:store.get('projects'),snippets:store.get('snippets'),notes:store.get('notes'),savedAt:Date.now()};
@@ -26,7 +27,7 @@ function collectSnapshot(){
 function saveBackupToDisk(btn){
   const b=btn||$('#saveBackupBtn');const original=b?b.innerHTML:null;
   if(b){b.disabled=true;b.innerHTML='<span class="spinner-ring sm"></span> Saving…'}
-  fetch(DISK_ENDPOINT+'?action=backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({snapshot:collectSnapshot()})})
+  fetch(DISK_ENDPOINT+'?action=backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({snapshot:collectSnapshot(),csrf:CSRF_TOKEN})})
     .then(r=>r.json()).then(res=>{
       if(res&&res.ok){toast('Backup saved to disk');refreshDiskStatus()}
       else{toast('Could not save backup to disk')}
@@ -60,7 +61,7 @@ function applyImportedSnapshot(snapshot,mode){
   renderProjects();renderSnippets();renderNotes();updateCounts();
   activity('Imported backup ('+mode+')');
   // Mirror the merged result to disk too, so the imported data isn't only in the browser.
-  fetch(DISK_ENDPOINT+'?action=restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({snapshot:collectSnapshot()})})
+  fetch(DISK_ENDPOINT+'?action=restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({snapshot:collectSnapshot(),csrf:CSRF_TOKEN})})
     .then(r=>r.json()).then(res=>{if(res&&res.ok){toast('Backup imported and saved to disk');refreshDiskStatus()}else{toast('Imported into the browser, but disk save failed')}})
     .catch(()=>toast('Imported into the browser, but disk save failed'));
 }
@@ -123,7 +124,7 @@ function saveDataLocation(){
   const input=$('#dataLocationInput'),btn=$('#saveLocationBtn');if(!input)return;
   const dataDir=input.value.trim();
   if(btn){btn.disabled=true;btn.dataset.original=btn.innerHTML;btn.innerHTML='<span class="spinner-ring sm"></span> Applying…'}
-  fetch(DISK_ENDPOINT+'?action=set-location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataDir})})
+  fetch(DISK_ENDPOINT+'?action=set-location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataDir,csrf:CSRF_TOKEN})})
     .then(r=>r.json()).then(res=>{
       if(res&&res.ok){localStorage.setItem('localSaveConfirmed','true');toast(dataDir?'Save location updated':'Save location reset to default');refreshDiskStatus()}
       else{toast((res&&res.error)||'Could not use that folder')}
@@ -785,7 +786,7 @@ $('#clearData')?.addEventListener('click',()=>{if(confirm('Clear projects, snipp
   if(logoutBtn){
     logoutBtn.addEventListener('click',()=>{
       logoutBtn.disabled=true;
-      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout'})})
+      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',csrf:CSRF_TOKEN})})
         .then(()=>{ window.location.href='?page=landing'; })
         .catch(()=>{ window.location.href='?page=landing'; });
     });

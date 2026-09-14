@@ -1,0 +1,39 @@
+# A-DevTools — root access control
+# See data/.htaccess, data/backups/.htaccess and database/.htaccess for the
+# folders that are blocked outright. This file protects individual files
+# in the app root that must exist on disk (to be `require`d) but should
+# never be requested directly over HTTP.
+
+Options -Indexes
+ServerSignature Off
+
+# Config, DB connection, shared helpers, security bootstrap, and the CLI-only
+# migration script are all `require`d by other PHP files — none of them are
+# meant to be visited directly in a browser.
+<FilesMatch "^(config|db|auth-helpers|security|migrate)\.php$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# The runtime backup-location config file (created by save-data.php) can
+# contain a filesystem path — no reason for it to be web-readable.
+<FilesMatch "^save-config\.json$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order deny,allow
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

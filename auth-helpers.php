@@ -6,6 +6,7 @@
  * (password_hash/password_verify).
  */
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/security.php';
 
 function makeUserId() {
     return 'u_' . bin2hex(random_bytes(8));
@@ -45,7 +46,7 @@ function insertUser($name, $email, $passwordHash) {
 
 /** Reads the logged-in user (if any) for the current session, or null. */
 function currentUser() {
-    if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+    adevtools_start_session();
     if (empty($_SESSION['userId'])) { return null; }
     $user = findUserById($_SESSION['userId']);
     if (!$user) {

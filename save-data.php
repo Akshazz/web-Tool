@@ -14,7 +14,9 @@
  * computer or restore an older point in time. Only the day-to-day mirror
  * moved from JSON files to MySQL.
  */
-session_start();
+require_once __DIR__ . '/security.php';
+adevtools_start_session();
+adevtools_security_headers();
 header('Content-Type: application/json');
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth-helpers.php';
@@ -125,6 +127,12 @@ try {
     $body = json_decode($raw, true);
     if (!is_array($body)) { $body = array(); }
     if ($action === null) { $action = isset($body['action']) ? $body['action'] : null; }
+
+    // Every action below this point changes data, so it needs a valid CSRF
+    // token ('status' above is a read and doesn't).
+    if (!csrf_verify(isset($body['csrf']) ? $body['csrf'] : null)) {
+        respond(false, array('error' => 'Your session expired. Please refresh the page and try again.'));
+    }
 
     if ($action === 'set-location') {
         $newDir = isset($body['dataDir']) ? trim((string)$body['dataDir']) : '';

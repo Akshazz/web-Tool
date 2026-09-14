@@ -3,7 +3,9 @@
  * Community account endpoint — register / login / logout.
  * Accounts are stored in MySQL (see sql/a-devtools-schema.sql and config.php).
  */
-session_start();
+require_once __DIR__ . '/security.php';
+adevtools_start_session();
+adevtools_security_headers();
 header('Content-Type: application/json');
 require_once __DIR__ . '/auth-helpers.php';
 
@@ -16,6 +18,12 @@ $raw = file_get_contents('php://input');
 $body = json_decode($raw, true);
 if (!is_array($body)) { $body = array(); }
 $action = isset($body['action']) ? $body['action'] : (isset($_GET['action']) ? $_GET['action'] : null);
+
+// whoami is a read-only check and safe without a CSRF token (no state
+// changes); every other action here changes session/account state.
+if ($action !== 'whoami' && !csrf_verify(isset($body['csrf']) ? $body['csrf'] : null)) {
+    respond(false, array('error' => 'Your session expired. Please refresh the page and try again.'));
+}
 
 try {
 
@@ -42,6 +50,7 @@ try {
         }
 
         $user = insertUser($name, $email, password_hash($password, PASSWORD_DEFAULT));
+        session_regenerate_id(true); // fresh session ID on privilege change — blocks session fixation
         $_SESSION['userId'] = $user['id'];
         respond(true, array('user' => publicUser($user)));
     }
@@ -50,11 +59,19 @@ try {
         $email = trim((string)(isset($body['email']) ? $body['email'] : ''));
         $password = (string)(isset($body['password']) ? $body['password'] : '');
 
+        if (login_is_locked($email)) {
+            $wait = max(1, ceil(login_locked_seconds($email) / 60));
+            respond(false, array('error' => 'Too many failed attempts. Try again in about ' . $wait . ' minute(s).'));
+        }
+
         $user = findUserByEmail($email);
         if (!$user || !password_verify($password, $user['password_hash'])) {
+            login_register_failure($email);
             respond(false, array('error' => 'Email or password is incorrect.'));
         }
 
+        login_clear_failures($email);
+        session_regenerate_id(true); // fresh session ID on privilege change — blocks session fixation
         $_SESSION['userId'] = $user['id'];
         respond(true, array('user' => publicUser($user)));
     }
