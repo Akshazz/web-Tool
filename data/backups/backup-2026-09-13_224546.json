@@ -1,0 +1,39 @@
+{
+    "projects": [
+        {
+            "id": 1789332151666,
+            "name": "TESTING DATA",
+            "tech": "Full Stock",
+            "desc": "Please follow my project data."
+        }
+    ],
+    "snippets": [
+        {
+            "id": "sample-sidebar",
+            "title": "Responsive Sidebar",
+            "lang": "HTML + CSS",
+            "code": "<aside class=\"sidebar\"><a class=\"active\">Dashboard</a><a>Projects</a><a>Settings</a></aside><main class=\"content\"><h1>Responsive workspace</h1><p>Resize the page to test the layout.</p></main><style>body{margin:0;font:14px system-ui}.sidebar{position:fixed;width:210px;height:100vh;padding:20px;background:#fff;border-right:1px solid #ddd}.sidebar a{display:block;padding:10px;border-radius:8px}.active{background:#eee}.content{margin-left:250px;padding:35px}@media(max-width:700px){.sidebar{position:relative;width:auto;height:auto}.content{margin-left:0}}</style>"
+        },
+        {
+            "id": "sample-cards",
+            "title": "Responsive Card Grid",
+            "lang": "CSS",
+            "code": ".card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card{padding:20px;border:1px solid #ddd;border-radius:14px;background:#fff}"
+        },
+        {
+            "id": "sample-modal",
+            "title": "Simple Modal",
+            "lang": "HTML + JS",
+            "code": "<button onclick=\"openModal()\">Open</button><div id=\"modal\" class=\"modal\" hidden><div class=\"box\"><button onclick=\"closeModal()\">Close</button><h2>Hello</h2><p>Working JavaScript modal.</p></div></div><style>.modal{position:fixed;inset:0;background:#0008;display:grid;place-items:center}.box{background:#fff;padding:25px;border-radius:14px}</style><script>function openModal(){document.getElementById('modal').hidden=false}function closeModal(){document.getElementById('modal').hidden=true}</script>"
+        }
+    ],
+    "notes": [
+        {
+            "id": 1789332323034,
+            "title": "BEST WAY",
+            "text": "KEEP",
+            "createdAt": 1789332323034
+        }
+    ],
+    "savedAt": 1789332346522
+}
