@@ -8,11 +8,11 @@
   'use strict';
 
   var LANGS = {
-    en: { name: 'English', flag: '🇬🇧' },
-    es: { name: 'Español', flag: '🇪🇸' },
-    fr: { name: 'Français', flag: '🇫🇷' },
-    de: { name: 'Deutsch', flag: '🇩🇪' },
-    tl: { name: 'Filipino', flag: '🇵🇭' }
+    en: { name: 'English', english: 'English', flag: '🇬🇧' },
+    es: { name: 'Español', english: 'Spanish', flag: '🇪🇸' },
+    fr: { name: 'Français', english: 'French', flag: '🇫🇷' },
+    de: { name: 'Deutsch', english: 'German', flag: '🇩🇪' },
+    tl: { name: 'Filipino', english: 'Filipino', flag: '🇵🇭' }
   };
 
   var DICT = {
@@ -59,8 +59,8 @@
       'settings.subtitle': 'Configure the local development workspace.',
       'settings.appearance': 'Appearance', 'settings.darkMode': 'Dark mode',
       'settings.themeNote': 'Theme is stored locally in your browser.',
-      'settings.resetTextSize': 'Reset text size', 'settings.resetToDefault': 'Reset to default',
-      'settings.textSizeNote': 'Use the A− / A+ buttons in the top bar any time to make text easier to read.',
+      'settings.resetTextSize': 'Text size', 'settings.resetToDefault': 'Reset to default',
+      'settings.textSizeNote': 'Use the − / + buttons here any time to make text easier to read.',
       'settings.experienceLevel': 'Experience level', 'settings.currentLevel': 'Current level:',
       'settings.experienceNote': 'This decides how much guidance is shown across the workspace.',
       'settings.changeExperience': 'Change experience level', 'settings.replayTour': 'Replay guided tour',
@@ -76,6 +76,18 @@
       'auth.createAccount': 'Create account', 'auth.alreadyMember': 'Already a member?',
       'auth.welcomeBack': 'Welcome back', 'auth.loginSubtitle': 'Log in to get back to your projects, snippets and notes.',
       'auth.yourPassword': 'Your password', 'auth.newHere': 'New here?',
+      'auth.emailLooksGood': 'Looks good', 'auth.emailInvalid': 'Enter a valid email address',
+      'auth.passwordsMatch': 'Passwords match', 'auth.passwordsNoMatch': 'Passwords do not match.',
+      'auth.strengthWeak': 'Weak password', 'auth.strengthFair': 'Fair password',
+      'auth.strengthGood': 'Good password', 'auth.strengthStrong': 'Strong password',
+      'auth.showPassword': 'Show password', 'auth.hidePassword': 'Hide password',
+      'auth.genericError': 'Something went wrong. Please try again.',
+      'auth.networkError': 'Could not reach the server. Please try again.',
+      'auth.pleaseWait': 'Please wait...',
+      'auth.successRedirecting': 'Success! Redirecting...',
+      'auth.consentReadRequired': 'Open and read both documents to the end to unlock this checkbox.',
+      'auth.legalScrollNote': 'Scroll down to finish reading.',
+      'auth.legalReadDone': "You've reached the end — thanks for reading.",
       'landing.heroSubtitle': 'A self-hosted workspace for organizing code, UI experiments, reusable snippets, projects and development notes — with a free community account to keep it all yours.',
       'landing.getStarted': 'Get Started', 'landing.joinNow': 'Join community now',
       'landing.navHome': 'Home', 'landing.navFeatures': 'Features',
@@ -143,8 +155,8 @@
       'settings.subtitle': 'Configura el espacio de trabajo de desarrollo local.',
       'settings.appearance': 'Apariencia', 'settings.darkMode': 'Modo oscuro',
       'settings.themeNote': 'El tema se guarda localmente en tu navegador.',
-      'settings.resetTextSize': 'Restablecer tamaño de texto', 'settings.resetToDefault': 'Restablecer por defecto',
-      'settings.textSizeNote': 'Usa los botones A− / A+ de la barra superior para facilitar la lectura del texto.',
+      'settings.resetTextSize': 'Tamaño de texto', 'settings.resetToDefault': 'Restablecer por defecto',
+      'settings.textSizeNote': 'Usa los botones − / + de aquí para facilitar la lectura del texto.',
       'settings.experienceLevel': 'Nivel de experiencia', 'settings.currentLevel': 'Nivel actual:',
       'settings.experienceNote': 'Esto decide cuánta guía se muestra en todo el espacio de trabajo.',
       'settings.changeExperience': 'Cambiar nivel de experiencia', 'settings.replayTour': 'Repetir recorrido guiado',
@@ -160,6 +172,14 @@
       'auth.createAccount': 'Crear cuenta', 'auth.alreadyMember': '¿Ya eres miembro?',
       'auth.welcomeBack': 'Bienvenido de nuevo', 'auth.loginSubtitle': 'Inicia sesión para volver a tus proyectos, fragmentos y notas.',
       'auth.yourPassword': 'Tu contraseña', 'auth.newHere': '¿Nuevo por aquí?',
+      'auth.emailLooksGood': 'Se ve bien', 'auth.emailInvalid': 'Introduce un correo electrónico válido',
+      'auth.passwordsMatch': 'Las contraseñas coinciden', 'auth.passwordsNoMatch': 'Las contraseñas no coinciden.',
+      'auth.strengthWeak': 'Contraseña débil', 'auth.strengthFair': 'Contraseña aceptable',
+      'auth.strengthGood': 'Contraseña buena', 'auth.strengthStrong': 'Contraseña fuerte',
+      'auth.showPassword': 'Mostrar contraseña', 'auth.hidePassword': 'Ocultar contraseña',
+      'auth.genericError': 'Algo salió mal. Inténtalo de nuevo.',
+      'auth.networkError': 'No se pudo conectar con el servidor. Inténtalo de nuevo.',
+      'auth.pleaseWait': 'Espera un momento...',
       'landing.heroSubtitle': 'Un espacio propio para organizar código, experimentos de interfaz, fragmentos reutilizables, proyectos y notas de desarrollo, con una cuenta comunitaria gratuita para que todo sea tuyo.',
       'landing.getStarted': 'Empezar', 'landing.joinNow': 'Únete a la comunidad ya',
       'landing.navHome': 'Inicio', 'landing.navFeatures': 'Funciones',
@@ -227,8 +247,8 @@
       'settings.subtitle': 'Configurez l\'espace de développement local.',
       'settings.appearance': 'Apparence', 'settings.darkMode': 'Mode sombre',
       'settings.themeNote': 'Le thème est enregistré localement dans votre navigateur.',
-      'settings.resetTextSize': 'Réinitialiser la taille du texte', 'settings.resetToDefault': 'Réinitialiser par défaut',
-      'settings.textSizeNote': 'Utilisez les boutons A− / A+ de la barre du haut pour faciliter la lecture.',
+      'settings.resetTextSize': 'Taille du texte', 'settings.resetToDefault': 'Réinitialiser par défaut',
+      'settings.textSizeNote': 'Utilisez les boutons − / + ci-dessus pour faciliter la lecture.',
       'settings.experienceLevel': 'Niveau d\'expérience', 'settings.currentLevel': 'Niveau actuel :',
       'settings.experienceNote': 'Cela détermine le niveau de guidage affiché dans tout l\'espace de travail.',
       'settings.changeExperience': 'Changer de niveau d\'expérience', 'settings.replayTour': 'Revoir la visite guidée',
@@ -244,6 +264,14 @@
       'auth.createAccount': 'Créer un compte', 'auth.alreadyMember': 'Déjà membre ?',
       'auth.welcomeBack': 'Content de vous revoir', 'auth.loginSubtitle': 'Connectez-vous pour retrouver vos projets, extraits et notes.',
       'auth.yourPassword': 'Votre mot de passe', 'auth.newHere': 'Nouveau ici ?',
+      'auth.emailLooksGood': 'Parfait', 'auth.emailInvalid': 'Saisissez une adresse e-mail valide',
+      'auth.passwordsMatch': 'Les mots de passe correspondent', 'auth.passwordsNoMatch': 'Les mots de passe ne correspondent pas.',
+      'auth.strengthWeak': 'Mot de passe faible', 'auth.strengthFair': 'Mot de passe correct',
+      'auth.strengthGood': 'Bon mot de passe', 'auth.strengthStrong': 'Mot de passe fort',
+      'auth.showPassword': 'Afficher le mot de passe', 'auth.hidePassword': 'Masquer le mot de passe',
+      'auth.genericError': 'Une erreur est survenue. Veuillez réessayer.',
+      'auth.networkError': 'Impossible de joindre le serveur. Veuillez réessayer.',
+      'auth.pleaseWait': 'Veuillez patienter...',
       'landing.heroSubtitle': 'Un espace auto-hébergé pour organiser code, expérimentations UI, extraits réutilisables, projets et notes de développement — avec un compte communautaire gratuit pour que tout reste à vous.',
       'landing.getStarted': 'Commencer', 'landing.joinNow': 'Rejoindre la communauté maintenant',
       'landing.navHome': 'Accueil', 'landing.navFeatures': 'Fonctionnalités',
@@ -311,8 +339,8 @@
       'settings.subtitle': 'Konfiguriere den lokalen Entwicklungsbereich.',
       'settings.appearance': 'Erscheinungsbild', 'settings.darkMode': 'Dunkelmodus',
       'settings.themeNote': 'Das Design wird lokal in deinem Browser gespeichert.',
-      'settings.resetTextSize': 'Textgröße zurücksetzen', 'settings.resetToDefault': 'Auf Standard zurücksetzen',
-      'settings.textSizeNote': 'Nutze jederzeit A− / A+ in der oberen Leiste für besser lesbaren Text.',
+      'settings.resetTextSize': 'Textgröße', 'settings.resetToDefault': 'Auf Standard zurücksetzen',
+      'settings.textSizeNote': 'Nutze jederzeit − / + hier für besser lesbaren Text.',
       'settings.experienceLevel': 'Erfahrungsstufe', 'settings.currentLevel': 'Aktuelle Stufe:',
       'settings.experienceNote': 'Dies bestimmt, wie viel Anleitung im gesamten Arbeitsbereich angezeigt wird.',
       'settings.changeExperience': 'Erfahrungsstufe ändern', 'settings.replayTour': 'Geführte Tour wiederholen',
@@ -328,6 +356,14 @@
       'auth.createAccount': 'Konto erstellen', 'auth.alreadyMember': 'Schon Mitglied?',
       'auth.welcomeBack': 'Willkommen zurück', 'auth.loginSubtitle': 'Melde dich an, um zu deinen Projekten, Snippets und Notizen zurückzukehren.',
       'auth.yourPassword': 'Dein Passwort', 'auth.newHere': 'Neu hier?',
+      'auth.emailLooksGood': 'Sieht gut aus', 'auth.emailInvalid': 'Gib eine gültige E-Mail-Adresse ein',
+      'auth.passwordsMatch': 'Passwörter stimmen überein', 'auth.passwordsNoMatch': 'Passwörter stimmen nicht überein.',
+      'auth.strengthWeak': 'Schwaches Passwort', 'auth.strengthFair': 'Ausreichendes Passwort',
+      'auth.strengthGood': 'Gutes Passwort', 'auth.strengthStrong': 'Starkes Passwort',
+      'auth.showPassword': 'Passwort anzeigen', 'auth.hidePassword': 'Passwort verbergen',
+      'auth.genericError': 'Etwas ist schiefgelaufen. Bitte versuche es erneut.',
+      'auth.networkError': 'Server nicht erreichbar. Bitte versuche es erneut.',
+      'auth.pleaseWait': 'Bitte warten...',
       'landing.heroSubtitle': 'Ein selbstgehosteter Arbeitsbereich für Code, UI-Experimente, wiederverwendbare Snippets, Projekte und Entwicklungsnotizen — mit einem kostenlosen Community-Konto, damit alles dir gehört.',
       'landing.getStarted': 'Loslegen', 'landing.joinNow': 'Jetzt der Community beitreten',
       'landing.navHome': 'Start', 'landing.navFeatures': 'Funktionen',
@@ -395,8 +431,8 @@
       'settings.subtitle': 'I-configure ang lokal na workspace para sa development.',
       'settings.appearance': 'Itsura', 'settings.darkMode': 'Dark mode',
       'settings.themeNote': 'Naka-save nang lokal sa iyong browser ang tema.',
-      'settings.resetTextSize': 'I-reset ang laki ng teksto', 'settings.resetToDefault': 'I-reset sa default',
-      'settings.textSizeNote': 'Gamitin ang A− / A+ sa itaas na bar anumang oras para mas madaling basahin ang teksto.',
+      'settings.resetTextSize': 'Laki ng teksto', 'settings.resetToDefault': 'I-reset sa default',
+      'settings.textSizeNote': 'Gamitin ang − / + dito anumang oras para mas madaling basahin ang teksto.',
       'settings.experienceLevel': 'Antas ng karanasan', 'settings.currentLevel': 'Kasalukuyang antas:',
       'settings.experienceNote': 'Ito ang nagtatakda kung gaano karaming gabay ang ipapakita sa buong workspace.',
       'settings.changeExperience': 'Palitan ang antas ng karanasan', 'settings.replayTour': 'Ulitin ang gabay na tour',
@@ -412,6 +448,14 @@
       'auth.createAccount': 'Gumawa ng account', 'auth.alreadyMember': 'Miyembro ka na?',
       'auth.welcomeBack': 'Maligayang pagbabalik', 'auth.loginSubtitle': 'Mag-log in para bumalik sa iyong mga proyekto, snippet, at tala.',
       'auth.yourPassword': 'Iyong password', 'auth.newHere': 'Bago dito?',
+      'auth.emailLooksGood': 'Maganda na', 'auth.emailInvalid': 'Maglagay ng wastong email address',
+      'auth.passwordsMatch': 'Magkatugma ang mga password', 'auth.passwordsNoMatch': 'Hindi magkatugma ang mga password.',
+      'auth.strengthWeak': 'Mahinang password', 'auth.strengthFair': 'Katanggap-tanggap na password',
+      'auth.strengthGood': 'Magandang password', 'auth.strengthStrong': 'Malakas na password',
+      'auth.showPassword': 'Ipakita ang password', 'auth.hidePassword': 'Itago ang password',
+      'auth.genericError': 'May nagkamali. Pakisubukan ulit.',
+      'auth.networkError': 'Hindi ma-reach ang server. Pakisubukan ulit.',
+      'auth.pleaseWait': 'Sandali lang...',
       'landing.heroSubtitle': 'Isang self-hosted na workspace para maayos ang code, UI experiment, muling magagamit na snippet, proyekto, at tala sa development — may libreng community account para sarili mo talaga ang lahat.',
       'landing.getStarted': 'Simulan Na', 'landing.joinNow': 'Sumali sa komunidad ngayon',
       'landing.navHome': 'Home', 'landing.navFeatures': 'Mga Feature',
@@ -465,8 +509,13 @@
 
     var codeEl = document.getElementById('langCode');
     if (codeEl) codeEl.textContent = lang.toUpperCase();
+    var flagEl = document.getElementById('langFlagCurrent');
+    if (flagEl && LANGS[lang]) flagEl.textContent = LANGS[lang].flag;
     document.querySelectorAll('#langDropdown [data-lang]').forEach(function (opt) {
-      opt.classList.toggle('active', opt.dataset.lang === lang);
+      var isActive = opt.dataset.lang === lang;
+      opt.classList.toggle('active', isActive);
+      opt.setAttribute('aria-checked', String(isActive));
+      opt.setAttribute('tabindex', isActive ? '0' : '-1');
     });
   }
 
@@ -476,7 +525,17 @@
     apply(lang);
   }
 
-  window.ADevToolsI18n = { setLanguage: setLanguage, languages: LANGS, current: detectDefault };
+  /** Looks up a dictionary string in the current language, falling back to
+   * English and then the key itself. Lets other scripts (e.g. the auth form
+   * validation in guest.php) translate microcopy they generate at runtime,
+   * instead of only text baked into data-i18n markup. */
+  function t(key) {
+    var lang = detectDefault();
+    var dict = DICT[lang] || DICT.en;
+    return dict[key] || DICT.en[key] || key;
+  }
+
+  window.ADevToolsI18n = { setLanguage: setLanguage, languages: LANGS, current: detectDefault, t: t };
 
   document.addEventListener('DOMContentLoaded', function () {
     apply(detectDefault());

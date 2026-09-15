@@ -7,11 +7,14 @@ $currentUser = currentUser();
 
 // Landing / login / signup are public "Community" pages with their own
 // lightweight template (no sidebar/topbar app shell) — see guest.php.
-$guestPages = array('landing', 'login', 'signup');
+$guestPages = array('landing', 'login', 'signup', 'terms', 'privacy');
+$loggedInRedirectPages = array('landing', 'login', 'signup');
 $requestedPage = isset($_GET['page']) ? $_GET['page'] : null;
 
 if (in_array($requestedPage, $guestPages, true)) {
-    if ($currentUser) { header('Location: ?page=dashboard'); exit; }
+    // Terms/Privacy stay readable even for a logged-in user; landing/login/
+    // signup send them straight to the dashboard instead.
+    if ($currentUser && in_array($requestedPage, $loggedInRedirectPages, true)) { header('Location: ?page=dashboard'); exit; }
     $page = $requestedPage;
     $cssVersion = file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : time();
     $i18nVersion = file_exists(__DIR__ . '/assets/js/i18n.js') ? filemtime(__DIR__ . '/assets/js/i18n.js') : time();
@@ -38,11 +41,18 @@ $pages = array(
 $page = isset($requestedPage) ? $requestedPage : 'dashboard';
 if (!isset($pages[$page])) { $page = 'dashboard'; }
 $validExperienceLevels = array('beginner', 'intermediate', 'professional');
-$experienceLevel = (isset($_COOKIE['experienceLevel']) && in_array($_COOKIE['experienceLevel'], $validExperienceLevels, true)) ? $_COOKIE['experienceLevel'] : null;
+$cookieExperience = (isset($_COOKIE['experienceLevel']) && in_array($_COOKIE['experienceLevel'], $validExperienceLevels, true)) ? $_COOKIE['experienceLevel'] : null;
+$dbExperience = (isset($currentUser['expertiseLevel']) && in_array($currentUser['expertiseLevel'], $validExperienceLevels, true)) ? $currentUser['expertiseLevel'] : null;
+// The database value is authoritative once set — it's what survives a
+// cleared cookie/localStorage or a switch to a new browser. Fall back to the
+// cookie for accounts that picked a level before this was persisted to the
+// database.
+$experienceLevel = $dbExperience !== null ? $dbExperience : $cookieExperience;
 $experienceLabels = array('beginner' => 'Beginner', 'intermediate' => 'Intermediate', 'professional' => 'Professional');
-$experienceLabel = isset($experienceLabels[$experienceLevel]) ? $experienceLabels[$experienceLevel] : 'Set level';
+$experienceLabel = isset($experienceLabels[$experienceLevel]) ? $experienceLabels[$experienceLevel] : 'Not set';
 $cssVersion = file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : time();
 $jsVersion  = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : time();
+$componentsVersion = file_exists(__DIR__ . '/assets/js/components.js') ? filemtime(__DIR__ . '/assets/js/components.js') : time();
 $i18nVersion = file_exists(__DIR__ . '/assets/js/i18n.js') ? filemtime(__DIR__ . '/assets/js/i18n.js') : time();
 $pwaVersion  = file_exists(__DIR__ . '/assets/js/pwa.js') ? filemtime(__DIR__ . '/assets/js/pwa.js') : time();
 function e($value) { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
@@ -58,7 +68,7 @@ $icons = array(
 );
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="en"<?php echo $experienceLevel !== null ? ' data-experience="' . e($experienceLevel) . '"' : ''; ?>>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -90,23 +100,21 @@ $icons = array(
         </div>
         <div class="top-actions">
             <button class="icon-btn mobile-only" id="mobileSearchToggle" title="Search" aria-label="Open search" data-i18n-title="topbar.search"><i class="bx bx-search"></i></button>
-            <div class="text-size-group" role="group" aria-label="Text size">
-                <button class="icon-btn" id="textSizeDown" title="Decrease text size" aria-label="Decrease text size" data-i18n-title="topbar.textDown"><i class="bx bx-minus"></i></button>
-                <button class="icon-btn" id="textSizeUp" title="Increase text size" aria-label="Increase text size" data-i18n-title="topbar.textUp"><i class="bx bx-plus"></i></button>
-            </div>
             <button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle dark mode" data-i18n-title="topbar.theme"><i class="bx bx-moon"></i></button>
-            <button class="pill-btn" id="experienceBtn" title="Change experience level" aria-label="Change experience level"><i class="bx bx-user-voice"></i><span id="experienceBtnLabel"><?php echo e($experienceLabel); ?></span></button>
+            <button class="pill-btn" id="experienceBtn" title="Change experience level" aria-label="Change experience level"><i class="bx bx-user-voice" id="experienceBtnIcon"></i><span id="experienceBtnLabel"><?php echo e($experienceLabel); ?></span></button>
             <div class="lang-picker" id="langPicker">
                 <button type="button" class="pill-btn lang-btn" id="langBtn" title="Change language" aria-label="Change language" aria-haspopup="true" aria-expanded="false" data-i18n-title="lang.picker">
-                    <span class="lang-icon">A</span><span id="langCode">EN</span><i class="bx bx-chevron-down"></i>
+                    <span class="lang-flag-current" id="langFlagCurrent" aria-hidden="true">🇬🇧</span><span id="langCode">EN</span><i class="bx bx-chevron-down"></i>
                 </button>
-                <div class="lang-dropdown" id="langDropdown" role="menu" hidden>
-                    <button type="button" class="lang-option active" data-lang="en" role="menuitem"><span class="lang-flag">🇬🇧</span> English</button>
-                    <button type="button" class="lang-option" data-lang="es" role="menuitem"><span class="lang-flag">🇪🇸</span> Español</button>
-                    <button type="button" class="lang-option" data-lang="fr" role="menuitem"><span class="lang-flag">🇫🇷</span> Français</button>
-                    <button type="button" class="lang-option" data-lang="de" role="menuitem"><span class="lang-flag">🇩🇪</span> Deutsch</button>
-                    <button type="button" class="lang-option" data-lang="tl" role="menuitem"><span class="lang-flag">🇵🇭</span> Filipino</button>
+                <div class="lang-dropdown" id="langDropdown" role="menu" aria-label="Choose language" hidden>
+                    <div class="lang-dropdown-title">Choose language</div>
+                    <button type="button" class="lang-option active" data-lang="en" role="menuitemradio" aria-checked="true" tabindex="0"><span class="lang-flag">🇬🇧</span><span class="lang-text"><span class="lang-native">English</span><small class="lang-english">English</small></span><i class="bx bx-check lang-check"></i></button>
+                    <button type="button" class="lang-option" data-lang="es" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇪🇸</span><span class="lang-text"><span class="lang-native">Español</span><small class="lang-english">Spanish</small></span><i class="bx bx-check lang-check"></i></button>
+                    <button type="button" class="lang-option" data-lang="fr" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇫🇷</span><span class="lang-text"><span class="lang-native">Français</span><small class="lang-english">French</small></span><i class="bx bx-check lang-check"></i></button>
+                    <button type="button" class="lang-option" data-lang="de" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇩🇪</span><span class="lang-text"><span class="lang-native">Deutsch</span><small class="lang-english">German</small></span><i class="bx bx-check lang-check"></i></button>
+                    <button type="button" class="lang-option" data-lang="tl" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇵🇭</span><span class="lang-text"><span class="lang-native">Filipino</span><small class="lang-english">Filipino</small></span><i class="bx bx-check lang-check"></i></button>
                 </div>
+                <div class="lang-backdrop" id="langBackdrop" hidden></div>
             </div>
             <button type="button" class="pill-btn install-btn" id="pwaInstallBtn" title="Install A-DevTools as an app" aria-label="Install A-DevTools as an app" data-i18n-title="pwa.installTitle">
                 <i class="bx bx-download"></i><span class="pwa-install-label" data-i18n="pwa.install">Install App</span>
@@ -193,7 +201,7 @@ $icons = array(
                 <section class="panel"><div class="panel-head"><h2>Shortcuts</h2><span class="muted"><kbd>Ctrl K</kbd> for command palette</span></div><div class="quick-grid">
                     <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
                     <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
-                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
+                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-code-curly"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
                     <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
                 </div></section>
                 <section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section>
@@ -213,7 +221,7 @@ $icons = array(
                 <section class="panel"><div class="panel-head"><h2>Quick start</h2></div><div class="quick-grid">
                     <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
                     <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
-                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
+                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-code-curly"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
                     <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
                 </div></section>
                 <section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section>
@@ -246,7 +254,7 @@ $icons = array(
                 <section class="panel"><div class="panel-head"><h2>Quick start</h2></div><div class="quick-grid">
                     <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
                     <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
-                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-file-code"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
+                    <a href="?page=snippets" class="quick-card"><b><i class="bx bx-code-curly"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
                     <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
                 </div></section>
                 <section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section>
@@ -303,13 +311,27 @@ button:hover{transform:translateY(-1px)}</textarea>
                 </div>
             </div>
         <?php elseif ($page === 'components'): ?>
-            <section class="page-head"><div><div class="eyebrow" data-i18n="components.eyebrow">UI LIBRARY</div><h1 data-i18n="components.title">UI Components</h1><p data-i18n="components.subtitle">Practical HTML5/CSS3 patterns you can reuse in your projects.</p></div></section>
-            <div class="component-grid">
-                <section class="panel"><h2>Buttons</h2><div class="demo-row"><button class="primary-btn">Primary</button><button class="ghost-btn">Secondary</button><button class="danger-btn">Danger</button></div></section>
-                <section class="panel"><h2>Form controls</h2><label>Project name<input class="input" placeholder="My project"></label><label>Technology<select class="input"><option>Native PHP</option><option>JavaScript</option><option>HTML5 / CSS3</option></select></label></section>
-                <section class="panel"><h2>Cards</h2><div class="mini-card"><b>Responsive card</b><p>Scales from desktop to mobile.</p></div></section>
-                <section class="panel"><h2>Alerts</h2><div class="notice">Information message</div><div class="notice success">Success message</div></section>
+            <section class="page-head">
+                <div>
+                    <div class="eyebrow" data-i18n="components.eyebrow">UI LIBRARY</div>
+                    <h1 data-i18n="components.title">UI Components</h1>
+                    <p data-i18n="components.subtitle">Practical HTML5/CSS3 patterns you can reuse in your projects.</p>
+                </div>
+            </section>
+
+            <div class="cmp-toolbar">
+                <div class="cmp-search">
+                    <i class="bx bx-search"></i>
+                    <input id="componentSearch" placeholder="Search components" aria-label="Search components" autocomplete="off">
+                </div>
+                <span class="cmp-count" id="componentCount"></span>
             </div>
+
+            <div id="componentLibrary">
+                <div class="cmp-cats" id="componentCats" role="group" aria-label="Filter by category"></div>
+                <div class="cmp-grid" id="componentGrid"></div>
+            </div>
+
         <?php elseif ($page === 'snippets'): ?>
             <section class="snippet-hero">
                 <div class="snippet-hero-copy">
@@ -347,12 +369,12 @@ button:hover{transform:translateY(-1px)}</textarea>
             <section class="snippet-section">
                 <div class="section-title-row"><div><span class="section-kicker">STARTER LIBRARY</span><h2>Runnable UI starters</h2><p>Choose a pattern, preview it, then open it in the playground and make it yours.</p></div><span class="library-hint"><i class="bx bx-zap"></i> Every starter can run</span></div>
                 <div class="starter-grid">
-                    <article class="starter-card"><div class="starter-preview preview-dashboard" data-template="dashboard"><div class="sp-top"></div><div class="sp-columns"><div class="sp-side"></div><div class="sp-content"><i></i><i></i><i></i><i></i></div></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Admin Dashboard</h3><p>Navbar, sidebar, stats and responsive cards.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: layout + cards</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="dashboard"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="dashboard"><i class="bx bx-play"></i> Run</button></div></div></article>
-                    <article class="starter-card"><div class="starter-preview preview-landing" data-template="landing"><div class="lp-nav"></div><div class="lp-hero"><i></i><b></b></div><div class="lp-cards"><i></i><i></i><i></i></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Landing Page</h3><p>Hero, navigation and responsive feature cards.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: hierarchy + spacing</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="landing"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="landing"><i class="bx bx-play"></i> Run</button></div></div></article>
-                    <article class="starter-card"><div class="starter-preview preview-form" data-template="form"><div class="form-line wide"></div><div class="form-line"></div><div class="form-line"></div><div class="form-button"></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Form Page</h3><p>Clean fields and validation-ready actions.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: inputs + labels</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="form"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="form"><i class="bx bx-play"></i> Run</button></div></div></article>
-                    <article class="starter-card"><div class="starter-preview preview-table" data-template="table"><div class="table-row head"></div><div class="table-row"></div><div class="table-row"></div><div class="table-row"></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Data Table</h3><p>Responsive data with status and actions.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: structured data</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="table"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="table"><i class="bx bx-play"></i> Run</button></div></div></article>
-                    <article class="starter-card"><div class="starter-preview preview-modal" data-template="modal"><div class="modal-mini"><b></b><i></i><i></i><span></span></div></div><div class="starter-info"><div><span class="tag">HTML + JS</span><h3>Interactive Modal</h3><p>A real working dialog with open and close actions.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: JavaScript events</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="modal"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="modal"><i class="bx bx-play"></i> Run</button></div></div></article>
-                    <article class="starter-card"><div class="starter-preview preview-navbar" data-template="navbar"><div class="nav-mini"><b></b><i></i><i></i><i></i></div><div class="nav-body"><b></b><b></b></div></div><div class="starter-info"><div><span class="tag">HTML + CSS + JS</span><h3>Responsive Navigation</h3><p>Mobile navigation with a working menu toggle.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: responsive JS</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="navbar"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="navbar"><i class="bx bx-play"></i> Run</button></div></div></article>
+                    <article class="starter-card"><div class="starter-preview preview-dashboard" data-template="dashboard"><div class="sp-top"></div><div class="sp-columns"><div class="sp-side"></div><div class="sp-content"><i></i><i></i><i></i><i></i></div></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Admin Dashboard</h3><p>Navbar, sidebar, stats and responsive cards.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: layout + cards</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="dashboard"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="dashboard"><i class="bx bx-play"></i> Run</button><button class="small-btn save-template" data-template="dashboard"><i class="bx bx-bookmark"></i> Save</button></div></div></article>
+                    <article class="starter-card"><div class="starter-preview preview-landing" data-template="landing"><div class="lp-nav"></div><div class="lp-hero"><i></i><b></b></div><div class="lp-cards"><i></i><i></i><i></i></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Landing Page</h3><p>Hero, navigation and responsive feature cards.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: hierarchy + spacing</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="landing"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="landing"><i class="bx bx-play"></i> Run</button><button class="small-btn save-template" data-template="landing"><i class="bx bx-bookmark"></i> Save</button></div></div></article>
+                    <article class="starter-card"><div class="starter-preview preview-form" data-template="form"><div class="form-line wide"></div><div class="form-line"></div><div class="form-line"></div><div class="form-button"></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Form Page</h3><p>Clean fields and validation-ready actions.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: inputs + labels</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="form"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="form"><i class="bx bx-play"></i> Run</button><button class="small-btn save-template" data-template="form"><i class="bx bx-bookmark"></i> Save</button></div></div></article>
+                    <article class="starter-card"><div class="starter-preview preview-table" data-template="table"><div class="table-row head"></div><div class="table-row"></div><div class="table-row"></div><div class="table-row"></div></div><div class="starter-info"><div><span class="tag">HTML + CSS</span><h3>Data Table</h3><p>Responsive data with status and actions.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: structured data</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="table"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="table"><i class="bx bx-play"></i> Run</button><button class="small-btn save-template" data-template="table"><i class="bx bx-bookmark"></i> Save</button></div></div></article>
+                    <article class="starter-card"><div class="starter-preview preview-modal" data-template="modal"><div class="modal-mini"><b></b><i></i><i></i><span></span></div></div><div class="starter-info"><div><span class="tag">HTML + JS</span><h3>Interactive Modal</h3><p>A real working dialog with open and close actions.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: JavaScript events</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="modal"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="modal"><i class="bx bx-play"></i> Run</button><button class="small-btn save-template" data-template="modal"><i class="bx bx-bookmark"></i> Save</button></div></div></article>
+                    <article class="starter-card"><div class="starter-preview preview-navbar" data-template="navbar"><div class="nav-mini"><b></b><i></i><i></i><i></i></div><div class="nav-body"><b></b><b></b></div></div><div class="starter-info"><div><span class="tag">HTML + CSS + JS</span><h3>Responsive Navigation</h3><p>Mobile navigation with a working menu toggle.</p><div class="teaches"><i class="bx bx-book-open"></i> Teaches: responsive JS</div></div><div class="starter-actions"><button class="small-btn preview-template" data-template="navbar"><i class="bx bx-show"></i> Preview</button><button class="small-btn run-template" data-template="navbar"><i class="bx bx-play"></i> Run</button><button class="small-btn save-template" data-template="navbar"><i class="bx bx-bookmark"></i> Save</button></div></div></article>
                 </div>
             </section>
             <section class="saved-section snippet-section">
@@ -374,7 +396,13 @@ button:hover{transform:translateY(-1px)}</textarea>
             </div></div>
         <?php else: ?>
             <section class="page-head"><div><div class="eyebrow" data-i18n="settings.eyebrow">CONFIGURATION</div><h1 data-i18n="settings.title">Settings</h1><p data-i18n="settings.subtitle">Configure the local development workspace.</p></div></section>
-            <div class="settings-grid"><section class="panel"><h2 data-i18n="settings.appearance">Appearance</h2><label class="switch-row"><span data-i18n="settings.darkMode">Dark mode</span> <input type="checkbox" id="darkSetting"><span class="switch"></span></label><p class="muted" data-i18n="settings.themeNote">Theme is stored locally in your browser.</p><label class="switch-row"><span data-i18n="settings.resetTextSize">Reset text size</span> <button class="small-btn" id="resetTextSize" data-i18n="settings.resetToDefault">Reset to default</button></label><p class="muted" data-i18n="settings.textSizeNote">Use the A− / A+ buttons in the top bar any time to make text easier to read.</p></section><section class="panel"><h2 data-i18n="settings.experienceLevel">Experience level</h2><p class="muted"><span data-i18n="settings.currentLevel">Current level:</span> <span class="experience-badge" id="experienceBadge">Not set</span></p><p class="muted" data-i18n="settings.experienceNote">This decides how much guidance is shown across the workspace.</p><button class="ghost-btn" id="changeExperienceBtn"><i class="bx bx-user-check"></i> <span data-i18n="settings.changeExperience">Change experience level</span></button><button class="ghost-btn" id="replayTour"><i class="bx bx-play"></i> <span data-i18n="settings.replayTour">Replay guided tour</span></button></section><section class="panel" id="localDiskBackup"><h2 data-i18n="settings.localBackup">Local disk backup</h2><p class="muted">Every project, snippet and note is mirrored to a dedicated folder on this computer — a Desktop folder by default — so your work lives on disk, not only inside the browser.</p><div class="disk-status" id="diskStatusBody"><p class="muted">Checking local save status…</p></div><div class="disk-actions"><button class="ghost-btn" id="saveBackupBtn"><i class="bx bx-save"></i> <span data-i18n="settings.saveBackupNow">Save backup to disk now</span></button><button class="ghost-btn" id="downloadBackupBtn"><i class="bx bx-download"></i> <span data-i18n="settings.downloadBackupFile">Download backup file</span></button></div><div class="form-grid" style="margin-top:14px"><label class="full">Save location<input id="dataLocationInput" class="input" placeholder="Loading default location…"></label></div><p class="muted">Leave blank to use the automatic default (a dedicated <code>A-DevTools-Data</code> folder on your Desktop, created for you the first time this runs), or enter a relative folder name (e.g. <code>my-backups</code>) or a full path (e.g. <code>D:/A-DevTools-Data</code>) to save somewhere else instead. Existing files are not moved automatically.</p><div class="disk-actions"><button class="ghost-btn" id="saveLocationBtn"><i class="bx bx-folder"></i> <span data-i18n="settings.saveLocation">Save location</span></button><button class="ghost-btn" id="resetLocationBtn"><i class="bx bx-reset"></i> <span data-i18n="settings.resetLocation">Reset to default</span></button></div><hr style="border:0;border-top:1px solid var(--border,#e5e7eb);margin:16px 0"><p class="muted"><b>Export / Import</b> — move your workspace to another computer, or restore an older copy.</p><div class="disk-actions"><button class="ghost-btn" id="importBackupBtn"><i class="bx bx-upload"></i> <span data-i18n="settings.importBackup">Import backup file</span></button><input type="file" id="importBackupInput" accept="application/json,.json" hidden></div></section><section class="panel"><h2 data-i18n="settings.workspaceData">Workspace data</h2><p class="muted">Projects, snippets and notes are stored in localStorage and mirrored to disk automatically. No external service is required.</p><button class="danger-btn" id="clearData" data-i18n="settings.clearData">Clear local data</button></section></div>
+            <?php
+              $levelOrder = array('beginner', 'intermediate', 'professional');
+              $levelIcons = array('beginner' => 'bx-seedling', 'intermediate' => 'bx-trending-up', 'professional' => 'bx-medal');
+              $curLevelIdx = array_search($experienceLevel, $levelOrder, true);
+              if ($curLevelIdx === false) { $curLevelIdx = -1; }
+            ?>
+            <div class="settings-grid"><section class="panel"><h2 data-i18n="settings.appearance">Appearance</h2><label class="switch-row"><span data-i18n="settings.darkMode">Dark mode</span> <input type="checkbox" id="darkSetting"><span class="switch"></span></label><p class="muted" data-i18n="settings.themeNote">Theme is stored locally in your browser.</p><label class="switch-row"><span data-i18n="settings.resetTextSize">Text size</span> <span class="text-size-group" role="group" aria-label="Text size"><button class="icon-btn" id="textSizeDown" title="Decrease text size" aria-label="Decrease text size" data-i18n-title="topbar.textDown"><i class="bx bx-minus"></i></button><button class="icon-btn" id="textSizeUp" title="Increase text size" aria-label="Increase text size" data-i18n-title="topbar.textUp"><i class="bx bx-plus"></i></button><button class="small-btn" id="resetTextSize" data-i18n="settings.resetToDefault">Reset to default</button></span></label><p class="muted" data-i18n="settings.textSizeNote">Use the − / + buttons here any time to make text easier to read.</p></section><section class="panel"><h2 data-i18n="settings.experienceLevel">Experience level</h2><p class="muted"><span data-i18n="settings.currentLevel">Current level:</span> <span class="experience-badge" id="experienceBadge"><?php echo e($experienceLabel); ?></span></p><div class="level-trail" id="levelTrail"><?php foreach ($levelOrder as $i => $lvl): ?><?php if ($i > 0): ?><div class="level-trail-line<?php echo $i - 1 < $curLevelIdx ? ' done' : ''; ?>"></div><?php endif; ?><button type="button" class="level-trail-step<?php echo $i <= $curLevelIdx ? ' done' : ''; ?><?php echo $i === $curLevelIdx ? ' current' : ''; ?>" title="<?php echo e(ucfirst($lvl)); ?>"><span class="trail-dot"><i class="bx <?php echo $levelIcons[$lvl]; ?>"></i></span><span class="trail-label"><?php echo e(ucfirst($lvl)); ?></span></button><?php endforeach; ?></div><p class="muted" data-i18n="settings.experienceNote">This decides how much guidance is shown across the workspace.</p><button class="ghost-btn" id="changeExperienceBtn"><i class="bx bx-user-check"></i> <span data-i18n="settings.changeExperience">Change experience level</span></button><button class="ghost-btn" id="replayTour"><i class="bx bx-play"></i> <span data-i18n="settings.replayTour">Replay guided tour</span></button></section><section class="panel" id="localDiskBackup"><h2 data-i18n="settings.localBackup">Local disk backup</h2><p class="muted">Every project, snippet and note is mirrored to a dedicated folder on this computer — a Desktop folder by default — so your work lives on disk, not only inside the browser.</p><div class="disk-status" id="diskStatusBody"><p class="muted">Checking local save status…</p></div><div class="disk-actions"><button class="ghost-btn" id="saveBackupBtn"><i class="bx bx-save"></i> <span data-i18n="settings.saveBackupNow">Save backup to disk now</span></button><button class="ghost-btn" id="downloadBackupBtn"><i class="bx bx-download"></i> <span data-i18n="settings.downloadBackupFile">Download backup file</span></button></div><div class="form-grid" style="margin-top:14px"><label class="full">Save location<input id="dataLocationInput" class="input" placeholder="Loading default location…"></label></div><p class="muted">Leave blank to use the automatic default (a dedicated <code>A-DevTools-Data</code> folder on your Desktop, created for you the first time this runs), or enter a relative folder name (e.g. <code>my-backups</code>) or a full path (e.g. <code>D:/A-DevTools-Data</code>) to save somewhere else instead. Existing files are not moved automatically.</p><div class="disk-actions"><button class="ghost-btn" id="saveLocationBtn"><i class="bx bx-folder"></i> <span data-i18n="settings.saveLocation">Save location</span></button><button class="ghost-btn" id="resetLocationBtn"><i class="bx bx-reset"></i> <span data-i18n="settings.resetLocation">Reset to default</span></button></div><hr style="border:0;border-top:1px solid var(--border,#e5e7eb);margin:16px 0"><p class="muted"><b>Export / Import</b> — move your workspace to another computer, or restore an older copy.</p><div class="disk-actions"><button class="ghost-btn" id="importBackupBtn"><i class="bx bx-upload"></i> <span data-i18n="settings.importBackup">Import backup file</span></button><input type="file" id="importBackupInput" accept="application/json,.json" hidden></div></section><section class="panel"><h2 data-i18n="settings.workspaceData">Workspace data</h2><p class="muted">Projects, snippets and notes are stored in localStorage and mirrored to disk automatically. No external service is required.</p><button class="danger-btn" id="clearData" data-i18n="settings.clearData">Clear local data</button></section></div>
         <?php endif; ?>
         </div>
     </main>
@@ -392,9 +420,13 @@ button:hover{transform:translateY(-1px)}</textarea>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/2.0.3/beautify.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/2.0.3/beautify-css.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/2.0.3/beautify-html.min.js"></script>
-<script>window.CSRF_TOKEN = <?php echo json_encode(csrf_token()); ?>;</script>
+<script>window.CSRF_TOKEN = <?php echo json_encode(csrf_token()); ?>;
+window.SERVER_EXPERIENCE_LEVEL = <?php echo json_encode($experienceLevel); ?>;</script>
 <script src="assets/js/app.js?v=<?php echo $jsVersion; ?>"></script>
 <script src="assets/js/i18n.js?v=<?php echo $i18nVersion; ?>"></script>
+<?php if ($page === 'components'): ?>
+<script src="assets/js/components.js?v=<?php echo $componentsVersion; ?>"></script>
+<?php endif; ?>
 <script src="assets/js/pwa.js?v=<?php echo $pwaVersion; ?>"></script>
 </body>
 </html>

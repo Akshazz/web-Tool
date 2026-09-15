@@ -146,31 +146,81 @@
   var langPicker = document.getElementById('langPicker');
   var langBtn = document.getElementById('langBtn');
   var langDropdown = document.getElementById('langDropdown');
+  var langBackdrop = document.getElementById('langBackdrop');
+
+  function isLangOpen() {
+    return !!(langDropdown && !langDropdown.hidden);
+  }
+
+  function openLangDropdown() {
+    if (!langDropdown) return;
+    langDropdown.hidden = false;
+    if (langBackdrop) langBackdrop.hidden = false;
+    langBtn && langBtn.setAttribute('aria-expanded', 'true');
+    var list = langOptionEls();
+    var activeIdx = list.findIndex(function (o) { return o.classList.contains('active'); });
+    focusLangOption(activeIdx > -1 ? activeIdx : 0);
+  }
 
   function closeLangDropdown() {
     if (!langDropdown) return;
     langDropdown.hidden = true;
+    if (langBackdrop) langBackdrop.hidden = true;
     langBtn && langBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleLangDropdown() {
+    if (isLangOpen()) closeLangDropdown();
+    else openLangDropdown();
   }
 
   langBtn && langBtn.addEventListener('click', function (e) {
     e.stopPropagation();
-    var open = langDropdown.hidden;
-    langDropdown.hidden = !open;
-    langBtn.setAttribute('aria-expanded', String(open));
+    toggleLangDropdown();
   });
 
   document.addEventListener('click', function (e) {
-    if (langPicker && !langPicker.contains(e.target)) closeLangDropdown();
+    if (isLangOpen() && langPicker && !langPicker.contains(e.target)) closeLangDropdown();
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') closeLangDropdown();
+    if (e.key === 'Escape' && isLangOpen()) {
+      closeLangDropdown();
+      langBtn && langBtn.focus();
+    }
   });
+  // Belt-and-suspenders: never leave the panel stranded open if the layout
+  // changes underneath it (rotation, resize, losing focus to another tab).
+  window.addEventListener('resize', function () { if (isLangOpen()) closeLangDropdown(); });
+  window.addEventListener('blur', function () { if (isLangOpen()) closeLangDropdown(); });
+  langBackdrop && langBackdrop.addEventListener('click', closeLangDropdown);
 
   langDropdown && langDropdown.addEventListener('click', function (e) {
     var opt = e.target.closest('[data-lang]');
     if (!opt) return;
     window.ADevToolsI18n && window.ADevToolsI18n.setLanguage(opt.dataset.lang);
     closeLangDropdown();
+    langBtn && langBtn.focus();
+  });
+
+  /* Full keyboard navigation within the open dropdown: Up/Down cycles
+     options, Home/End jump to the ends, Enter/Space picks (native button
+     behaviour already covers that once focused). */
+  function langOptionEls() {
+    return langDropdown ? Array.prototype.slice.call(langDropdown.querySelectorAll('.lang-option')) : [];
+  }
+  function focusLangOption(idx) {
+    var list = langOptionEls();
+    if (!list.length) return;
+    idx = ((idx % list.length) + list.length) % list.length;
+    list.forEach(function (o, i) { o.classList.toggle('kbd-focus', i === idx); });
+    list[idx].focus();
+  }
+  langDropdown && langDropdown.addEventListener('keydown', function (e) {
+    var list = langOptionEls();
+    var current = list.findIndex(function (o) { return o === document.activeElement; });
+    if (e.key === 'ArrowDown') { e.preventDefault(); focusLangOption(current + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); focusLangOption(current - 1); }
+    else if (e.key === 'Home') { e.preventDefault(); focusLangOption(0); }
+    else if (e.key === 'End') { e.preventDefault(); focusLangOption(list.length - 1); }
   });
 })();

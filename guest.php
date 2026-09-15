@@ -18,7 +18,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#111214">
-<title><?php echo $page === 'login' ? 'Log in' : ($page === 'signup' ? 'Join the Community' : 'A-DevTools — Build. Test. Learn. Ship.'); ?></title>
+<title><?php echo $page === 'login' ? 'Log in' : ($page === 'signup' ? 'Join the Community' : ($page === 'terms' ? 'Terms of Service' : ($page === 'privacy' ? 'Privacy Policy' : 'A-DevTools — Build. Test. Learn. Ship.'))); ?></title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
@@ -53,15 +53,17 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
         </button>
         <div class="lang-picker" id="langPicker">
             <button type="button" class="pill-btn lang-btn" id="langBtn" title="Change language" aria-label="Change language" aria-haspopup="true" aria-expanded="false" data-i18n-title="lang.picker">
-                <span class="lang-icon">A</span><span id="langCode">EN</span><i class="bx bx-chevron-down"></i>
+                <span class="lang-flag-current" id="langFlagCurrent" aria-hidden="true">🇬🇧</span><span id="langCode">EN</span><i class="bx bx-chevron-down"></i>
             </button>
-            <div class="lang-dropdown" id="langDropdown" role="menu" hidden>
-                <button type="button" class="lang-option active" data-lang="en" role="menuitemradio" aria-checked="true" tabindex="0"><span class="lang-flag">🇬🇧</span> English<i class="bx bx-check lang-check"></i></button>
-                <button type="button" class="lang-option" data-lang="es" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇪🇸</span> Español<i class="bx bx-check lang-check"></i></button>
-                <button type="button" class="lang-option" data-lang="fr" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇫🇷</span> Français<i class="bx bx-check lang-check"></i></button>
-                <button type="button" class="lang-option" data-lang="de" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇩🇪</span> Deutsch<i class="bx bx-check lang-check"></i></button>
-                <button type="button" class="lang-option" data-lang="tl" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇵🇭</span> Filipino<i class="bx bx-check lang-check"></i></button>
+            <div class="lang-dropdown" id="langDropdown" role="menu" aria-label="Choose language" hidden>
+                <div class="lang-dropdown-title">Choose language</div>
+                <button type="button" class="lang-option active" data-lang="en" role="menuitemradio" aria-checked="true" tabindex="0"><span class="lang-flag">🇬🇧</span><span class="lang-text"><span class="lang-native">English</span><small class="lang-english">English</small></span><i class="bx bx-check lang-check"></i></button>
+                <button type="button" class="lang-option" data-lang="es" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇪🇸</span><span class="lang-text"><span class="lang-native">Español</span><small class="lang-english">Spanish</small></span><i class="bx bx-check lang-check"></i></button>
+                <button type="button" class="lang-option" data-lang="fr" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇫🇷</span><span class="lang-text"><span class="lang-native">Français</span><small class="lang-english">French</small></span><i class="bx bx-check lang-check"></i></button>
+                <button type="button" class="lang-option" data-lang="de" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇩🇪</span><span class="lang-text"><span class="lang-native">Deutsch</span><small class="lang-english">German</small></span><i class="bx bx-check lang-check"></i></button>
+                <button type="button" class="lang-option" data-lang="tl" role="menuitemradio" aria-checked="false" tabindex="-1"><span class="lang-flag">🇵🇭</span><span class="lang-text"><span class="lang-native">Filipino</span><small class="lang-english">Filipino</small></span><i class="bx bx-check lang-check"></i></button>
             </div>
+            <div class="lang-backdrop" id="langBackdrop" hidden></div>
         </div>
         <button type="button" class="pill-btn install-btn" id="pwaInstallBtn" title="Install A-DevTools as an app" aria-label="Install A-DevTools as an app" data-i18n-title="pwa.installTitle">
             <i class="bx bx-download"></i><span class="pwa-install-label" data-i18n="pwa.install">Install App</span>
@@ -104,30 +106,91 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
                 <p class="muted" data-i18n="auth.joinSubtitle">Create a free account to sync your workspace to this computer and pick up where you left off.</p>
                 <form id="signupForm" class="auth-form" novalidate>
                     <label for="suName" data-i18n="auth.name">Name</label>
-                    <input class="input" id="suName" name="name" placeholder="Ada Lovelace" autocomplete="name" required>
+                    <div class="field-group">
+                        <i class="bx bx-user field-icon"></i>
+                        <input class="input has-icon" id="suName" name="name" placeholder="Ada Lovelace" autocomplete="name" required>
+                    </div>
                     <label for="suEmail" data-i18n="auth.email">Email</label>
-                    <input class="input" id="suEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    <div class="field-group">
+                        <i class="bx bx-envelope field-icon"></i>
+                        <input class="input has-icon" id="suEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    </div>
+                    <span class="field-hint" id="suEmailHint" aria-live="polite"><i class="bx bx-x-circle"></i><i class="bx bx-check-circle"></i><span class="field-hint-text"></span></span>
                     <label for="suPassword" data-i18n="auth.password">Password</label>
-                    <input class="input" id="suPassword" name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.passwordPlaceholder">
+                    <div class="field-group">
+                        <i class="bx bx-lock-alt field-icon"></i>
+                        <input class="input has-icon has-toggle" id="suPassword" name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.passwordPlaceholder">
+                        <button type="button" class="field-toggle" data-toggle-password aria-label="Show password" title="Show password" data-i18n-title="auth.showPassword" aria-controls="suPassword"><i class="bx bx-hide"></i></button>
+                    </div>
+                    <div class="password-strength" id="suPasswordStrength" hidden>
+                        <div class="password-strength-bar"><span></span></div>
+                        <small class="password-strength-label"></small>
+                    </div>
                     <label for="suPassword2" data-i18n="auth.confirmPassword">Confirm password</label>
-                    <input class="input" id="suPassword2" name="password2" type="password" placeholder="Re-enter your password" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.confirmPasswordPlaceholder">
+                    <div class="field-group">
+                        <i class="bx bx-lock-alt field-icon"></i>
+                        <input class="input has-icon has-toggle" id="suPassword2" name="password2" type="password" placeholder="Re-enter your password" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.confirmPasswordPlaceholder">
+                        <button type="button" class="field-toggle" data-toggle-password aria-label="Show password" title="Show password" data-i18n-title="auth.showPassword" aria-controls="suPassword2"><i class="bx bx-hide"></i></button>
+                    </div>
+                    <span class="field-hint" id="suPassword2Hint" aria-live="polite"><i class="bx bx-x-circle"></i><i class="bx bx-check-circle"></i><span class="field-hint-text"></span></span>
+                    <div class="auth-consent-wrap">
+                    <label class="auth-consent" id="suConsentRow" for="suConsent">
+                        <input type="checkbox" id="suConsent" name="consent" required disabled aria-describedby="suConsentHint">
+                        <span data-i18n="auth.consentText">I agree to the <a href="?page=terms" data-legal-link="terms" data-i18n="auth.termsLink">Terms of Service</a> and <a href="?page=privacy" data-legal-link="privacy" data-i18n="auth.privacyLink">Privacy Policy</a>.</span>
+                    </label>
+                    <small class="auth-consent-hint" id="suConsentHint"><i class="bx bx-info-circle"></i> <span data-i18n="auth.consentReadRequired">Open and read both documents to the end to unlock this checkbox.</span></small>
+                    </div>
                     <div class="auth-error" id="signupError" hidden></div>
                     <button class="primary-btn auth-submit" type="submit"><i class="bx bx-user-plus"></i> <span data-i18n="auth.createAccount">Create account</span></button>
                 </form>
+                <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
+                <div class="oauth-buttons">
+                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=signup" aria-label="Sign up with Google"><i class="bx bxl-google"></i> Google</a>
+                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=signup" aria-label="Sign up with GitHub"><i class="bx bxl-github"></i> GitHub</a>
+                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=signup" aria-label="Sign up with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
+                </div>
                 <p class="muted auth-switch"><span data-i18n="auth.alreadyMember">Already a member?</span> <a class="text-link" href="?page=login" data-i18n="auth.login">Log in</a></p>
             <?php else: ?>
                 <h1 data-i18n="auth.welcomeBack">Welcome back</h1>
                 <p class="muted" data-i18n="auth.loginSubtitle">Log in to get back to your projects, snippets and notes.</p>
                 <form id="loginForm" class="auth-form" novalidate>
                     <label for="liEmail" data-i18n="auth.email">Email</label>
-                    <input class="input" id="liEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    <div class="field-group">
+                        <i class="bx bx-envelope field-icon"></i>
+                        <input class="input has-icon" id="liEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    </div>
                     <label for="liPassword" data-i18n="auth.password">Password</label>
-                    <input class="input" id="liPassword" name="password" type="password" placeholder="Your password" autocomplete="current-password" required data-i18n-placeholder="auth.yourPassword">
+                    <div class="field-group">
+                        <i class="bx bx-lock-alt field-icon"></i>
+                        <input class="input has-icon has-toggle" id="liPassword" name="password" type="password" placeholder="Your password" autocomplete="current-password" required data-i18n-placeholder="auth.yourPassword">
+                        <button type="button" class="field-toggle" data-toggle-password aria-label="Show password" title="Show password" data-i18n-title="auth.showPassword" aria-controls="liPassword"><i class="bx bx-hide"></i></button>
+                    </div>
                     <div class="auth-error" id="loginError" hidden></div>
                     <button class="primary-btn auth-submit" type="submit"><i class="bx bx-log-in"></i> <span data-i18n="auth.login">Log in</span></button>
                 </form>
+                <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
+                <div class="oauth-buttons">
+                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=login" aria-label="Sign in with Google"><i class="bx bxl-google"></i> Google</a>
+                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=login" aria-label="Sign in with GitHub"><i class="bx bxl-github"></i> GitHub</a>
+                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=login" aria-label="Sign in with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
+                </div>
                 <p class="muted auth-switch"><span data-i18n="auth.newHere">New here?</span> <a class="text-link" href="?page=signup" data-i18n="auth.joinCommunityLower">Join the community</a></p>
             <?php endif; ?>
+        </div>
+    </section>
+
+<?php elseif ($page === 'terms' || $page === 'privacy'): ?>
+
+    <section class="auth-shell">
+        <div class="auth-card panel legal-page">
+            <?php if ($page === 'terms'): ?>
+                <h1>Terms of Service</h1>
+                <p class="muted">Placeholder terms — replace this page with your own before going live. By creating an account you agree to use A-DevTools responsibly, keep your login credentials secure, and accept that this is a self-hosted, free, no-warranty tool.</p>
+            <?php else: ?>
+                <h1>Privacy Policy</h1>
+                <p class="muted">Placeholder privacy policy — replace this page with your own before going live. A-DevTools stores the account info you provide (name, email, and — for password accounts — a hashed password) and, if you sign in with Google, GitHub or Facebook, the name/email/ID that provider shares with us. This data is used only to run your account and is not sold or shared with third parties.</p>
+            <?php endif; ?>
+            <p class="muted auth-switch"><a class="text-link" href="?page=landing">&larr; Back to A-DevTools</a></p>
         </div>
     </section>
 
@@ -167,16 +230,49 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
                 <p class="muted" data-i18n="landing.signupSubtitle">Create a free account and your workspace syncs to this computer automatically.</p>
                 <form id="signupForm" class="auth-form" novalidate>
                     <label for="suName" data-i18n="auth.name">Name</label>
-                    <input class="input" id="suName" name="name" placeholder="Ada Lovelace" autocomplete="name" required>
+                    <div class="field-group">
+                        <i class="bx bx-user field-icon"></i>
+                        <input class="input has-icon" id="suName" name="name" placeholder="Ada Lovelace" autocomplete="name" required>
+                    </div>
                     <label for="suEmail" data-i18n="auth.email">Email</label>
-                    <input class="input" id="suEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    <div class="field-group">
+                        <i class="bx bx-envelope field-icon"></i>
+                        <input class="input has-icon" id="suEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    </div>
+                    <span class="field-hint" id="suEmailHint" aria-live="polite"><i class="bx bx-x-circle"></i><i class="bx bx-check-circle"></i><span class="field-hint-text"></span></span>
                     <label for="suPassword" data-i18n="auth.password">Password</label>
-                    <input class="input" id="suPassword" name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.passwordPlaceholder">
+                    <div class="field-group">
+                        <i class="bx bx-lock-alt field-icon"></i>
+                        <input class="input has-icon has-toggle" id="suPassword" name="password" type="password" placeholder="At least 6 characters" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.passwordPlaceholder">
+                        <button type="button" class="field-toggle" data-toggle-password aria-label="Show password" title="Show password" data-i18n-title="auth.showPassword" aria-controls="suPassword"><i class="bx bx-hide"></i></button>
+                    </div>
+                    <div class="password-strength" id="suPasswordStrength" hidden>
+                        <div class="password-strength-bar"><span></span></div>
+                        <small class="password-strength-label"></small>
+                    </div>
                     <label for="suPassword2" data-i18n="auth.confirmPassword">Confirm password</label>
-                    <input class="input" id="suPassword2" name="password2" type="password" placeholder="Re-enter your password" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.confirmPasswordPlaceholder">
+                    <div class="field-group">
+                        <i class="bx bx-lock-alt field-icon"></i>
+                        <input class="input has-icon has-toggle" id="suPassword2" name="password2" type="password" placeholder="Re-enter your password" autocomplete="new-password" minlength="6" required data-i18n-placeholder="auth.confirmPasswordPlaceholder">
+                        <button type="button" class="field-toggle" data-toggle-password aria-label="Show password" title="Show password" data-i18n-title="auth.showPassword" aria-controls="suPassword2"><i class="bx bx-hide"></i></button>
+                    </div>
+                    <span class="field-hint" id="suPassword2Hint" aria-live="polite"><i class="bx bx-x-circle"></i><i class="bx bx-check-circle"></i><span class="field-hint-text"></span></span>
+                    <div class="auth-consent-wrap">
+                    <label class="auth-consent" id="suConsentRow" for="suConsent">
+                        <input type="checkbox" id="suConsent" name="consent" required disabled aria-describedby="suConsentHint">
+                        <span data-i18n="auth.consentText">I agree to the <a href="?page=terms" data-legal-link="terms" data-i18n="auth.termsLink">Terms of Service</a> and <a href="?page=privacy" data-legal-link="privacy" data-i18n="auth.privacyLink">Privacy Policy</a>.</span>
+                    </label>
+                    <small class="auth-consent-hint" id="suConsentHint"><i class="bx bx-info-circle"></i> <span data-i18n="auth.consentReadRequired">Open and read both documents to the end to unlock this checkbox.</span></small>
+                    </div>
                     <div class="auth-error" id="signupError" hidden></div>
                     <button class="primary-btn auth-submit ripple-btn" type="submit"><i class="bx bx-user-plus"></i> <span data-i18n="landing.signUp">Sign Up</span></button>
                 </form>
+                <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
+                <div class="oauth-buttons">
+                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=signup" aria-label="Sign up with Google"><i class="bx bxl-google"></i> Google</a>
+                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=signup" aria-label="Sign up with GitHub"><i class="bx bxl-github"></i> GitHub</a>
+                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=signup" aria-label="Sign up with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
+                </div>
                 <p class="muted auth-switch"><span data-i18n="landing.alreadyHaveAccount">Already have an account?</span> <a class="text-link" href="#joinPanel" data-open-auth="login" data-i18n="landing.signInNow">sign in now!</a></p>
             </div>
 
@@ -187,12 +283,25 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
                 <p class="muted" data-i18n="landing.signInSubtitle">Log in to A-DevTools to keep working on your projects.</p>
                 <form id="loginForm" class="auth-form" novalidate>
                     <label for="liEmail" data-i18n="auth.email">Email</label>
-                    <input class="input" id="liEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    <div class="field-group">
+                        <i class="bx bx-envelope field-icon"></i>
+                        <input class="input has-icon" id="liEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email" required>
+                    </div>
                     <label for="liPassword" data-i18n="auth.password">Password</label>
-                    <input class="input" id="liPassword" name="password" type="password" placeholder="Your password" autocomplete="current-password" required data-i18n-placeholder="auth.yourPassword">
+                    <div class="field-group">
+                        <i class="bx bx-lock-alt field-icon"></i>
+                        <input class="input has-icon has-toggle" id="liPassword" name="password" type="password" placeholder="Your password" autocomplete="current-password" required data-i18n-placeholder="auth.yourPassword">
+                        <button type="button" class="field-toggle" data-toggle-password aria-label="Show password" title="Show password" data-i18n-title="auth.showPassword" aria-controls="liPassword"><i class="bx bx-hide"></i></button>
+                    </div>
                     <div class="auth-error" id="loginError" hidden></div>
                     <button class="primary-btn auth-submit ripple-btn" type="submit"><i class="bx bx-log-in"></i> <span data-i18n="landing.signIn">Sign In</span></button>
                 </form>
+                <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
+                <div class="oauth-buttons">
+                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=login" aria-label="Sign in with Google"><i class="bx bxl-google"></i> Google</a>
+                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=login" aria-label="Sign in with GitHub"><i class="bx bxl-github"></i> GitHub</a>
+                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=login" aria-label="Sign in with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
+                </div>
                 <p class="muted auth-switch"><span data-i18n="landing.noAccount">Don't have an account?</span> <a class="text-link" href="#joinPanel" data-open-auth="signup" data-i18n="landing.signUpNow">sign up now!</a></p>
             </div>
             </div>
@@ -201,7 +310,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
 
     <section class="guest-features" id="features">
         <div class="guest-feature panel reveal"><b><i class="bx bx-code-alt"></i></b><h3 data-i18n="quick.code">Code Playground</h3><p class="muted" data-i18n="landing.featCodeDesc">Write and preview HTML, CSS and JavaScript in a live sandbox.</p></div>
-        <div class="guest-feature panel reveal"><b><i class="bx bx-file-code"></i></b><h3 data-i18n="quick.snippets">Snippets</h3><p class="muted" data-i18n="landing.featSnippetsDesc">Save, search and reuse the components you build most often.</p></div>
+        <div class="guest-feature panel reveal"><b><i class="bx bx-code-curly"></i></b><h3 data-i18n="quick.snippets">Snippets</h3><p class="muted" data-i18n="landing.featSnippetsDesc">Save, search and reuse the components you build most often.</p></div>
         <div class="guest-feature panel reveal"><b><i class="bx bx-folder-open"></i></b><h3 data-i18n="nav.projects">Projects</h3><p class="muted" data-i18n="landing.featProjectsDesc">Track personal development projects and ideas in one place.</p></div>
         <div class="guest-feature panel reveal"><b><i class="bx bx-note"></i></b><h3 data-i18n="nav.notes">Notes</h3><p class="muted" data-i18n="landing.featNotesDesc">Keep technical notes without leaving your workspace.</p></div>
     </section>
@@ -223,7 +332,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
         <div class="guest-footer-col reveal">
             <span class="guest-footer-heading"><i class="bx bx-grid-alt"></i> <span data-i18n="side.workspace2">Workspace</span></span>
             <a href="?page=code"><i class="bx bx-code-alt"></i> <span data-i18n="quick.code">Code Playground</span></a>
-            <a href="?page=snippets"><i class="bx bx-file-code"></i> <span data-i18n="quick.snippets">Snippets</span></a>
+            <a href="?page=snippets"><i class="bx bx-code-curly"></i> <span data-i18n="quick.snippets">Snippets</span></a>
             <a href="?page=projects"><i class="bx bx-folder-open"></i> <span data-i18n="nav.projects">Projects</span></a>
             <a href="?page=notes"><i class="bx bx-note"></i> <span data-i18n="nav.notes">Notes</span></a>
         </div>
@@ -309,37 +418,72 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
       closeAuth();
     });
   });
+
+  /* ---------- Surface oauth.php errors (e.g. "?oauth_error=..." after a failed
+     social sign-in redirect) in the matching panel's error box. ---------- */
+  var oauthError = new URLSearchParams(window.location.search).get('oauth_error');
+  if (oauthError) {
+    var which = new URLSearchParams(window.location.search).get('oauth_intent') === 'login' ? 'login' : 'signup';
+    openAuth(which);
+    var box = document.getElementById(which === 'login' ? 'loginError' : 'signupError');
+    if (box) { box.hidden = false; box.textContent = oauthError; }
+  }
 })();
 </script>
 
 <script>
 (function(){
   window.CSRF_TOKEN = <?php echo json_encode(csrf_token()); ?>;
+
+  /* Short alias for the shared i18n lookup — falls back to the given
+     English string if i18n.js hasn't loaded yet for some reason. */
+  function t(key, fallback) {
+    return window.ADevToolsI18n ? window.ADevToolsI18n.t(key) : fallback;
+  }
+
+  function showAuthError(form, errorBox, message) {
+    errorBox.innerHTML = '<i class="bx bx-error-circle"></i><span>' + message + '</span>';
+    errorBox.hidden = false;
+  }
+
   function submitAuth(action, payload, form, errorBox, submitBtn) {
     errorBox.hidden = true;
     var originalHtml = submitBtn.innerHTML;
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> Please wait...';
+    submitBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> ' + t('auth.pleaseWait', 'Please wait...');
     fetch('auth.php', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(Object.assign({action:action, csrf: window.CSRF_TOKEN}, payload))
     }).then(function(r){ return r.json(); }).then(function(data){
       if (data && data.ok) {
+        submitBtn.classList.add('is-success');
+        submitBtn.innerHTML = '<i class="bx bx-loader-alt bx-spin"></i> ' + t('auth.successRedirecting', 'Success! Redirecting...');
         window.location.href = '?page=dashboard';
         return;
       }
-      errorBox.textContent = (data && data.error) ? data.error : 'Something went wrong. Please try again.';
-      errorBox.hidden = false;
+      showAuthError(form, errorBox, (data && data.error) ? data.error : t('auth.genericError', 'Something went wrong. Please try again.'));
       submitBtn.disabled = false;
       submitBtn.innerHTML = originalHtml;
     }).catch(function(){
-      errorBox.textContent = 'Could not reach the server. Please try again.';
-      errorBox.hidden = false;
+      showAuthError(form, errorBox, t('auth.networkError', 'Could not reach the server. Please try again.'));
       submitBtn.disabled = false;
       submitBtn.innerHTML = originalHtml;
     });
   }
+
+  /* ---------- OAuth buttons navigate straight to oauth.php, so give them
+     the same loading-circle feedback as the email/password submit button
+     instead of leaving the click feeling unresponsive while the browser
+     loads the next page. ---------- */
+  document.querySelectorAll('.oauth-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      if (btn.classList.contains('is-loading')) { return; }
+      btn.classList.add('is-loading');
+      var icon = btn.querySelector('.bx');
+      if (icon) { icon.className = 'bx bx-loader-alt bx-spin'; }
+    });
+  });
 
   var signupForm = document.getElementById('signupForm');
   if (signupForm) {
@@ -350,9 +494,16 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
       var email = document.getElementById('suEmail').value.trim();
       var password = document.getElementById('suPassword').value;
       var password2 = document.getElementById('suPassword2').value;
+      var consent = document.getElementById('suConsent');
+      var consentRow = document.getElementById('suConsentRow');
+      if (consent && !consent.checked) {
+        if (consentRow) { consentRow.classList.add('is-error'); }
+        showAuthError(signupForm, errorBox, t('auth.consentRequired', 'Please agree to the Terms of Service and Privacy Policy to continue.'));
+        return;
+      }
+      if (consentRow) { consentRow.classList.remove('is-error'); }
       if (password !== password2) {
-        errorBox.textContent = 'Passwords do not match.';
-        errorBox.hidden = false;
+        showAuthError(signupForm, errorBox, t('auth.passwordsNoMatch', 'Passwords do not match.'));
         return;
       }
       submitAuth('register', {name:name, email:email, password:password}, signupForm, errorBox, signupForm.querySelector('.auth-submit'));
@@ -369,6 +520,114 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
       submitAuth('login', {email:email, password:password}, loginForm, errorBox, loginForm.querySelector('.auth-submit'));
     });
   }
+})();
+</script>
+
+<script>
+(function(){
+  function t(key, fallback) {
+    return window.ADevToolsI18n ? window.ADevToolsI18n.t(key) : fallback;
+  }
+
+  /* ---------- Password show/hide toggles (any field with a data-toggle-password button) ---------- */
+  document.querySelectorAll('[data-toggle-password]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var input = document.getElementById(btn.getAttribute('aria-controls'));
+      if (!input) return;
+      var revealing = input.type === 'password';
+      input.type = revealing ? 'text' : 'password';
+      btn.innerHTML = revealing ? '<i class="bx bx-show"></i>' : '<i class="bx bx-hide"></i>';
+      var label = revealing ? t('auth.hidePassword', 'Hide password') : t('auth.showPassword', 'Show password');
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+    });
+  });
+
+  /* ---------- Live email format check ---------- */
+  function wireEmailField(inputId, hintId) {
+    var input = document.getElementById(inputId);
+    var hint = document.getElementById(hintId);
+    if (!input || !hint) return;
+    var textEl = hint.querySelector('.field-hint-text');
+    function check() {
+      var group = input.closest('.field-group');
+      var val = input.value.trim();
+      if (!val) {
+        group.classList.remove('is-valid', 'is-invalid');
+        hint.classList.remove('is-error', 'is-success');
+        textEl.textContent = '';
+        return;
+      }
+      var ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+      group.classList.toggle('is-valid', ok);
+      group.classList.toggle('is-invalid', !ok);
+      hint.classList.toggle('is-success', ok);
+      hint.classList.toggle('is-error', !ok);
+      textEl.textContent = ok ? t('auth.emailLooksGood', 'Looks good') : t('auth.emailInvalid', 'Enter a valid email address');
+    }
+    input.addEventListener('input', check);
+    input.addEventListener('blur', check);
+  }
+  wireEmailField('suEmail', 'suEmailHint');
+
+  /* ---------- Password strength meter ---------- */
+  function scorePassword(pw) {
+    var score = 0;
+    if (pw.length >= 6) score++;
+    if (pw.length >= 10) score++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+    if (/[0-9]/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+    return score;
+  }
+  function wireStrengthMeter(passwordId, meterId) {
+    var input = document.getElementById(passwordId);
+    var meter = document.getElementById(meterId);
+    if (!input || !meter) return;
+    var label = meter.querySelector('.password-strength-label');
+    var bar = meter.querySelector('.password-strength-bar span');
+    input.addEventListener('input', function(){
+      var val = input.value;
+      if (!val) { meter.hidden = true; return; }
+      meter.hidden = false;
+      var score = scorePassword(val);
+      var level = 'weak', text = t('auth.strengthWeak', 'Weak password');
+      if (score >= 5) { level = 'strong'; text = t('auth.strengthStrong', 'Strong password'); }
+      else if (score >= 3) { level = 'good'; text = t('auth.strengthGood', 'Good password'); }
+      else if (score >= 2) { level = 'fair'; text = t('auth.strengthFair', 'Fair password'); }
+      meter.setAttribute('data-level', level);
+      label.textContent = text;
+      if (bar) { bar.style.width = Math.max(12, (score / 5) * 100) + '%'; }
+    });
+  }
+  wireStrengthMeter('suPassword', 'suPasswordStrength');
+
+  /* ---------- Confirm-password live match indicator ---------- */
+  function wireMatchField(passwordId, confirmId, hintId) {
+    var pass = document.getElementById(passwordId);
+    var confirm = document.getElementById(confirmId);
+    var hint = document.getElementById(hintId);
+    if (!pass || !confirm || !hint) return;
+    var textEl = hint.querySelector('.field-hint-text');
+    function check() {
+      var group = confirm.closest('.field-group');
+      if (!confirm.value) {
+        group.classList.remove('is-valid', 'is-invalid');
+        hint.classList.remove('is-error', 'is-success');
+        textEl.textContent = '';
+        return;
+      }
+      var match = confirm.value === pass.value;
+      group.classList.toggle('is-valid', match);
+      group.classList.toggle('is-invalid', !match);
+      hint.classList.toggle('is-success', match);
+      hint.classList.toggle('is-error', !match);
+      textEl.textContent = match ? t('auth.passwordsMatch', 'Passwords match') : t('auth.passwordsNoMatch', 'Passwords do not match.');
+    }
+    confirm.addEventListener('input', check);
+    pass.addEventListener('input', function(){ if (confirm.value) check(); });
+  }
+  wireMatchField('suPassword', 'suPassword2', 'suPassword2Hint');
 })();
 </script>
 
@@ -456,14 +715,30 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
     });
   }
 
-  /* ---------- Sticky navbar shrink-on-scroll ---------- */
+  /* ---------- Sticky navbar shrink-on-scroll ----------
+     Fixed: shrinking the topbar's own padding shifts page layout by ~14px
+     right at the same scrollY=8 threshold that toggles it, which could
+     flip the class back and forth in a feedback loop (visible as the
+     navbar jittering/"shaking" near the top of the page). A wider gap
+     between the on/off thresholds (hysteresis) stops that oscillation,
+     and the rAF throttle avoids piling up redundant toggles per scroll. */
   var topbar = document.getElementById('guestTopbar');
   if (topbar) {
+    var topbarTicking = false;
     var onScroll = function(){
-      topbar.classList.toggle('is-scrolled', window.scrollY > 8);
+      topbarTicking = false;
+      if (window.scrollY > 32) {
+        topbar.classList.add('is-scrolled');
+      } else if (window.scrollY < 8) {
+        topbar.classList.remove('is-scrolled');
+      }
     };
     onScroll();
-    window.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('scroll', function(){
+      if (topbarTicking) { return; }
+      topbarTicking = true;
+      requestAnimationFrame(onScroll);
+    }, {passive:true});
   }
 
   /* ---------- Desktop nav: scrollspy + sliding indicator ---------- */
@@ -537,44 +812,136 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/auth-helpers.ph
     });
   }
 
-  /* ---------- Language dropdown: full keyboard navigation ---------- */
-  var langDropdown = document.getElementById('langDropdown');
-  var langBtn = document.getElementById('langBtn');
-  if (langDropdown && langBtn) {
-    function langOptions(){ return Array.prototype.slice.call(langDropdown.querySelectorAll('.lang-option')); }
-    function focusOption(idx, opts){
-      var list = langOptions();
-      if (!list.length) { return; }
-      idx = ((idx % list.length) + list.length) % list.length;
-      list.forEach(function(o, i){
-        o.setAttribute('tabindex', i === idx ? '0' : '-1');
-        o.classList.toggle('kbd-focus', i === idx);
-      });
-      if (!opts || opts.focus !== false) { list[idx].focus(); }
-    }
-    langDropdown.addEventListener('keydown', function(e){
-      var list = langOptions();
-      var current = list.findIndex(function(o){ return o === document.activeElement; });
-      if (e.key === 'ArrowDown') { e.preventDefault(); focusOption(current + 1); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); focusOption(current - 1); }
-      else if (e.key === 'Home') { e.preventDefault(); focusOption(0); }
-      else if (e.key === 'End') { e.preventDefault(); focusOption(list.length - 1); }
-      else if (e.key === 'Escape') { langBtn.click(); langBtn.focus(); }
-    });
-    langBtn.addEventListener('click', function(){
-      setTimeout(function(){
-        if (!langDropdown.hidden) {
-          var activeIdx = langOptions().findIndex(function(o){ return o.classList.contains('active'); });
-          focusOption(activeIdx > -1 ? activeIdx : 0);
-        }
-      }, 0);
-    });
-    langDropdown.querySelectorAll('.lang-option').forEach(function(opt){
-      opt.addEventListener('click', function(){
-        langOptions().forEach(function(o){ o.setAttribute('aria-checked', String(o === opt)); });
-      });
-    });
+  /* Language dropdown open/close, keyboard navigation and selection are
+     handled centrally in assets/js/pwa.js (shared with the logged-in app
+     shell), and active/aria-checked state syncing lives in assets/js/i18n.js
+     so both templates stay in lock-step automatically. */
+})();
+</script>
+<script>
+(function(){
+  function t(key, fallback) {
+    return window.ADevToolsI18n ? window.ADevToolsI18n.t(key) : fallback;
   }
+
+  /* ---------- Generic modal open/close (the #modal markup is shared with
+     the logged-in app shell, but guest.php never wired it up until now). ---------- */
+  var modal = document.getElementById('modal');
+  var modalBody = document.getElementById('modalBody');
+  var modalBox = modal ? modal.querySelector('.modal') : null;
+  var modalCloseBtn = document.getElementById('modalClose');
+
+  function openModal(html) {
+    if (!modal || !modalBody) return;
+    modalBody.innerHTML = html;
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('modal-open');
+    if (modalBox) { modalBox.scrollTop = 0; }
+  }
+  function closeModal() {
+    if (!modal) return;
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('modal-open');
+  }
+  if (modalCloseBtn) { modalCloseBtn.addEventListener('click', closeModal); }
+  if (modal) {
+    modal.addEventListener('click', function(e){ if (e.target === modal) { closeModal(); } });
+  }
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && modal && modal.classList.contains('show')) { closeModal(); }
+  });
+
+  /* ---------- Terms of Service / Privacy Policy read-gate ----------
+     The sign-up "I agree" checkbox stays disabled until the person has
+     opened *and scrolled to the end of* both documents in the modal
+     below — so agreement can't be given to text that was never read. ---------- */
+  var legalContent = {
+    terms: {
+      title: 'Terms of Service',
+      html:
+        '<p class="muted">Placeholder terms — replace this page with your own before going live.</p>' +
+        '<ol style="margin:0;padding-left:20px;line-height:1.7;color:var(--text)">' +
+        '<li>By creating an account you agree to use A-DevTools responsibly and not to abuse, disrupt or attempt unauthorized access to the service.</li>' +
+        '<li>You are responsible for keeping your login credentials — password or connected OAuth account — secure.</li>' +
+        '<li>Projects, snippets and notes you create remain yours; you are responsible for the content you store here.</li>' +
+        '<li>This is a self-hosted, free, no-warranty tool provided "as is", without guarantees of uptime, backups or fitness for a particular purpose.</li>' +
+        '<li>Accounts found to be abusing the service (spam, attempted exploits, automated scraping) may be suspended.</li>' +
+        '<li>These terms may change as the project evolves; continued use after a change means you accept the updated terms.</li>' +
+        '<li>The service is not intended for storing sensitive personal, financial or health data.</li>' +
+        '<li>Questions about these terms can be directed to the workspace administrator.</li>' +
+        '</ol>',
+    },
+    privacy: {
+      title: 'Privacy Policy',
+      html:
+        '<p class="muted">Placeholder privacy policy — replace this page with your own before going live.</p>' +
+        '<ol style="margin:0;padding-left:20px;line-height:1.7;color:var(--text)">' +
+        '<li>A-DevTools stores the account info you provide: name, email, and — for password accounts — a hashed password (never the plain password).</li>' +
+        '<li>If you sign in with Google, GitHub or Facebook, we store the name, email and account ID that provider shares with us.</li>' +
+        '<li>Projects, snippets and notes are stored to run your workspace and are not scanned for advertising purposes.</li>' +
+        '<li>This data is used only to operate your account and is not sold or shared with third parties.</li>' +
+        '<li>Standard technical logs (e.g. sign-in timestamps) may be kept briefly for security and troubleshooting.</li>' +
+        '<li>You can request export or deletion of your account data at any time from Settings.</li>' +
+        '</ol>',
+    }
+  };
+  var legalRead = { terms: false, privacy: false };
+  var consent = document.getElementById('suConsent');
+  var consentRow = document.getElementById('suConsentRow');
+  var consentHint = document.getElementById('suConsentHint');
+
+  function updateConsentAvailability() {
+    if (!consent) return;
+    var allRead = legalRead.terms && legalRead.privacy;
+    consent.disabled = !allRead;
+    if (!allRead && consent.checked) { consent.checked = false; }
+    if (consentRow) { consentRow.classList.toggle('is-locked', !allRead); }
+    if (consentHint) { consentHint.classList.toggle('is-unlocked', allRead); }
+  }
+
+  function openLegalModal(which) {
+    var doc = legalContent[which];
+    if (!doc || !modal) { window.location.href = '?page=' + which; return; }
+    var scrollNote = t('auth.legalScrollNote', 'Scroll down to finish reading.');
+    openModal(
+      '<h2>' + doc.title + '</h2>' +
+      '<div id="legalModalBody">' + doc.html + '</div>' +
+      '<p class="legal-modal-note" id="legalModalNote"><i class="bx bx-down-arrow-circle"></i><span>' + scrollNote + '</span></p>'
+    );
+    var note = document.getElementById('legalModalNote');
+    var markedRead = false;
+    function markRead() {
+      if (markedRead) return;
+      markedRead = true;
+      legalRead[which] = true;
+      if (note) {
+        note.classList.add('is-done');
+        note.innerHTML = '<i class="bx bx-check-circle"></i><span>' + t('auth.legalReadDone', "You've reached the end — thanks for reading.") + '</span>';
+      }
+      updateConsentAvailability();
+    }
+    function checkScroll() {
+      if (!modalBox) return;
+      if (modalBox.scrollTop + modalBox.clientHeight >= modalBox.scrollHeight - 4) { markRead(); }
+    }
+    if (modalBox) {
+      modalBox.addEventListener('scroll', checkScroll);
+      // If the content is short enough to fit without scrolling, don't hold
+      // reading hostage to a scrollbar that will never appear.
+      requestAnimationFrame(checkScroll);
+    }
+  }
+
+  document.querySelectorAll('[data-legal-link]').forEach(function(a){
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      openLegalModal(a.getAttribute('data-legal-link'));
+    });
+  });
+
+  updateConsentAvailability();
 })();
 </script>
 <script src="assets/js/i18n.js?v=<?php echo (int)$i18nVersion; ?>"></script>

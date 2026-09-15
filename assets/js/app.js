@@ -162,7 +162,7 @@ $('#sidebarToggle')?.addEventListener('click',()=>{
   setDesktopCollapsed(!sidebar?.classList.contains('collapsed'));
 });
 setDesktopCollapsed(localStorage.getItem('sidebarCollapsed')==='true');
-function setTheme(dark){document.body.classList.toggle('dark',!!dark);localStorage.setItem('theme',dark?'dark':'light');const c=$('#darkSetting');if(c)c.checked=!!dark}
+function setTheme(dark){document.body.classList.toggle('dark',!!dark);localStorage.setItem('theme',dark?'dark':'light');const c=$('#darkSetting');if(c)c.checked=!!dark;const ti=$('#themeToggle')?.querySelector('.bx');if(ti)ti.className='bx '+(dark?'bx-sun':'bx-moon')}
 $('#themeToggle')?.addEventListener('click',()=>setTheme(!document.body.classList.contains('dark')));
 setTheme(localStorage.getItem('theme')==='dark');
 $('#darkSetting')?.addEventListener('change',e=>setTheme(e.target.checked));
@@ -233,13 +233,261 @@ function savePlaygroundPayload(payload,title){
   location.href='?page=code';
 }
 function runStarter(key){const t=starterTemplates[key];if(t)savePlaygroundPayload({code:t.code,lang:t.lang},t.title)}
+/* Starter snippet library.
+   Seeded by id, not by "is the list empty", so people who already had the
+   first three samples still receive the ones added later. A sample is only
+   inserted when no snippet with that id is present, so nothing the person
+   wrote is overwritten. One caveat: a sample they deleted comes back once on
+   the next seed-version bump, since deletions are not tracked separately. */
+const SAMPLE_SNIPPETS=[
+  {id:'sample-sidebar',title:'Responsive Sidebar',lang:'HTML + CSS',code:`<aside class="sidebar"><a class="active">Dashboard</a><a>Projects</a><a>Settings</a></aside><main class="content"><h1>Responsive workspace</h1><p>Resize the page to test the layout.</p></main><style>body{margin:0;font:14px system-ui}.sidebar{position:fixed;width:210px;height:100vh;padding:20px;background:#fff;border-right:1px solid #ddd}.sidebar a{display:block;padding:10px;border-radius:8px}.active{background:#eee}.content{margin-left:250px;padding:35px}@media(max-width:700px){.sidebar{position:relative;width:auto;height:auto}.content{margin-left:0}}</style>`},
+  {id:'sample-cards',title:'Responsive Card Grid',lang:'CSS',code:`.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card{padding:20px;border:1px solid #ddd;border-radius:14px;background:#fff}`},
+  {id:'sample-modal',title:'Simple Modal',lang:'HTML + JS',code:`<button onclick="openModal()">Open</button><div id="modal" class="modal" hidden><div class="box"><button onclick="closeModal()">Close</button><h2>Hello</h2><p>Working JavaScript modal.</p></div></div><style>.modal{position:fixed;inset:0;background:#0008;display:grid;place-items:center}.box{background:#fff;padding:25px;border-radius:14px}</style><script>function openModal(){document.getElementById('modal').hidden=false}function closeModal(){document.getElementById('modal').hidden=true}<\/script>`},
+
+  {id:'sample-flex-center',title:'Centre Anything',lang:'CSS',code:`/* Three ways to centre a box. Pick one. */
+.centre-grid{display:grid;place-items:center;min-height:100vh}
+.centre-flex{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.centre-abs{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}`},
+  {id:'sample-sticky-header',title:'Sticky Header on Scroll',lang:'HTML + CSS + JS',code:`<header id="bar"><b>A-DevTools</b><nav><a href="#">Docs</a><a href="#">Pricing</a></nav></header><main><p>Scroll down — the header gets a shadow once you leave the top.</p></main><style>body{margin:0;font:15px system-ui}#bar{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:18px 24px;background:#fff;transition:padding .2s,box-shadow .2s}#bar.small{padding:11px 24px;box-shadow:0 6px 20px rgba(0,0,0,.09)}nav a{margin-left:16px;color:#555;text-decoration:none}main{height:200vh;padding:40px 24px}</style><script>addEventListener('scroll',function(){document.getElementById('bar').classList.toggle('small',scrollY>32)});<\/script>`},
+  {id:'sample-form-validate',title:'Form Validation',lang:'HTML + JS',code:`<form id="f" novalidate><label>Email<input name="email" type="email" required></label><label>Password<input name="pw" type="password" minlength="8" required></label><button>Create account</button><p id="msg"></p></form><style>body{font:14px system-ui;padding:24px}label{display:block;margin-bottom:14px}input{display:block;width:100%;max-width:300px;padding:9px;margin-top:5px;border:1px solid #ccc;border-radius:8px}input:invalid.touched{border-color:#c0392b}button{padding:10px 16px;border-radius:8px;border:0;background:#111;color:#fff}#msg{color:#2d8a42}</style><script>
+var f=document.getElementById('f');
+f.addEventListener('submit',function(e){
+  e.preventDefault();
+  var ok=true;
+  [].forEach.call(f.elements,function(el){
+    if(!el.name)return;
+    el.classList.add('touched');
+    if(!el.checkValidity())ok=false;
+  });
+  document.getElementById('msg').textContent=ok?'Account created.':'';
+});
+<\/script>`},
+  {id:'sample-fetch',title:'Fetch with Error Handling',lang:'JavaScript',code:`async function loadProjects(){
+  const list=document.getElementById('list');
+  list.textContent='Loading…';
+  try{
+    const res=await fetch('/api/projects.php',{headers:{'Accept':'application/json'}});
+    if(!res.ok)throw new Error('Server returned '+res.status);
+    const data=await res.json();
+    list.textContent=data.length?'':'No projects yet.';
+    data.forEach(p=>{
+      const li=document.createElement('li');
+      li.textContent=p.name;
+      list.appendChild(li);
+    });
+  }catch(err){
+    list.textContent='Could not load projects: '+err.message;
+  }
+}`},
+  {id:'sample-debounce',title:'Debounce and Throttle',lang:'JavaScript',code:`/* Debounce: run once the calls stop. Good for search inputs. */
+function debounce(fn,wait){
+  let t;
+  return function(...args){clearTimeout(t);t=setTimeout(()=>fn.apply(this,args),wait)};
+}
+
+/* Throttle: run at most once per interval. Good for scroll and resize. */
+function throttle(fn,every){
+  let last=0;
+  return function(...args){
+    const now=Date.now();
+    if(now-last>=every){last=now;fn.apply(this,args)}
+  };
+}
+
+const search=debounce(q=>console.log('searching',q),300);`},
+  {id:'sample-localstorage',title:'Safe localStorage Wrapper',lang:'JavaScript',code:`/* localStorage throws in private mode and on quota errors, so wrap it. */
+const store={
+  get(key,fallback=null){
+    try{const v=localStorage.getItem(key);return v===null?fallback:JSON.parse(v)}
+    catch(e){return fallback}
+  },
+  set(key,value){
+    try{localStorage.setItem(key,JSON.stringify(value));return true}
+    catch(e){console.warn('Storage full or unavailable:',e.name);return false}
+  },
+  remove(key){try{localStorage.removeItem(key)}catch(e){}}
+};`},
+  {id:'sample-dark-toggle',title:'Dark Mode Toggle',lang:'HTML + CSS + JS',code:`<button id="t">Toggle theme</button><h1>Readable in both themes</h1><p>The choice is remembered, and the first visit follows your system setting.</p><style>:root{--bg:#fff;--fg:#111}body.dark{--bg:#111;--fg:#f2f2f2}body{margin:0;padding:34px;background:var(--bg);color:var(--fg);font:15px system-ui;transition:background .2s,color .2s}button{padding:9px 14px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit}</style><script>
+var saved=localStorage.getItem('theme');
+var dark=saved?saved==='dark':matchMedia('(prefers-color-scheme:dark)').matches;
+function apply(){document.body.classList.toggle('dark',dark);localStorage.setItem('theme',dark?'dark':'light')}
+document.getElementById('t').onclick=function(){dark=!dark;apply()};
+apply();
+<\/script>`},
+  {id:'sample-accordion',title:'Accordion (no JavaScript)',lang:'HTML + CSS',code:`<details open><summary>What is saved locally?</summary><p>Projects, snippets and notes.</p></details><details><summary>Can I export it?</summary><p>Yes — Settings has a backup file download.</p></details><style>body{font:15px system-ui;padding:24px}details{border:1px solid #e3e5e8;border-radius:12px;margin-bottom:9px;background:#fff}summary{padding:13px 16px;cursor:pointer;font-weight:650;list-style:none;display:flex;justify-content:space-between}summary::-webkit-details-marker{display:none}summary::after{content:'+';color:#888}details[open] summary::after{content:'–'}details p{margin:0;padding:0 16px 14px;color:#666}</style>`},
+  {id:'sample-toast',title:'Toast Notifications',lang:'HTML + CSS + JS',code:`<button onclick="toast('Saved to disk')">Save</button><button onclick="toast('Could not connect',true)">Fail</button><div id="toasts"></div><style>body{font:15px system-ui;padding:24px}button{margin-right:8px;padding:9px 14px;border-radius:8px;border:1px solid #ddd;background:#fff}#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px}#toasts div{padding:11px 15px;border-radius:10px;background:#111;color:#fff;font-size:13px;box-shadow:0 12px 30px rgba(0,0,0,.22);animation:in .2s ease}#toasts div.bad{background:#b42318}@keyframes in{from{opacity:0;transform:translateY(10px)}}</style><script>
+function toast(text,bad){
+  var d=document.createElement('div');
+  d.textContent=text;if(bad)d.className='bad';
+  document.getElementById('toasts').appendChild(d);
+  setTimeout(function(){d.remove()},2400);
+}
+<\/script>`},
+  {id:'sample-tabs',title:'Accessible Tabs',lang:'HTML + CSS + JS',code:`<div role="tablist"><button role="tab" aria-selected="true" aria-controls="a">Overview</button><button role="tab" aria-selected="false" aria-controls="b">Files</button></div><div id="a" role="tabpanel"><p>Arrow keys move between tabs.</p></div><div id="b" role="tabpanel" hidden><p>Only the visible panel stays in the page.</p></div><style>body{font:15px system-ui;padding:24px}[role=tablist]{display:flex;border-bottom:1px solid #e3e5e8}[role=tab]{border:0;background:transparent;padding:12px 18px;color:#777;font-weight:650;box-shadow:inset 0 -2px transparent}[role=tab][aria-selected=true]{color:#111;box-shadow:inset 0 -2px #111}[role=tabpanel]{padding:16px 0}</style><script>
+var tabs=[].slice.call(document.querySelectorAll('[role=tab]'));
+function select(t){
+  tabs.forEach(function(x){
+    var on=x===t;
+    x.setAttribute('aria-selected',on);x.tabIndex=on?0:-1;
+    document.getElementById(x.getAttribute('aria-controls')).hidden=!on;
+  });
+  t.focus();
+}
+tabs.forEach(function(t,i){
+  t.addEventListener('click',function(){select(t)});
+  t.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight')select(tabs[(i+1)%tabs.length]);
+    if(e.key==='ArrowLeft')select(tabs[(i-1+tabs.length)%tabs.length]);
+  });
+});
+<\/script>`},
+  {id:'sample-table',title:'Sortable Table',lang:'HTML + CSS + JS',code:`<table id="t"><thead><tr><th>Project</th><th>Owner</th><th>Status</th></tr></thead><tbody><tr><td>Checkout</td><td>Ana</td><td>Live</td></tr><tr><td>Billing</td><td>Marco</td><td>Draft</td></tr><tr><td>Auth</td><td>Ken</td><td>Blocked</td></tr></tbody></table><style>body{font:14px system-ui;padding:24px}table{border-collapse:collapse;width:100%;max-width:520px;background:#fff}th,td{padding:11px 14px;text-align:left;border-bottom:1px solid #e3e5e8}th{background:#f6f7f8;cursor:pointer;user-select:none;font-size:12px;color:#666}tr:hover td{background:#fafafa}</style><script>
+var body=document.querySelector('#t tbody');
+[].forEach.call(document.querySelectorAll('#t th'),function(th,col){
+  var asc=true;
+  th.addEventListener('click',function(){
+    var rows=[].slice.call(body.rows);
+    rows.sort(function(a,b){
+      return a.cells[col].textContent.localeCompare(b.cells[col].textContent)*(asc?1:-1);
+    });
+    asc=!asc;
+    rows.forEach(function(r){body.appendChild(r)});
+  });
+});
+<\/script>`},
+  {id:'sample-grid-areas',title:'App Layout with Grid Areas',lang:'CSS',code:`.app{
+  display:grid;
+  min-height:100vh;
+  grid-template-columns:240px 1fr;
+  grid-template-rows:64px 1fr auto;
+  grid-template-areas:
+    "head head"
+    "side main"
+    "side foot";
+}
+.app > header{grid-area:head}
+.app > aside{grid-area:side}
+.app > main{grid-area:main}
+.app > footer{grid-area:foot}
+
+@media(max-width:780px){
+  .app{
+    grid-template-columns:1fr;
+    grid-template-areas:"head" "main" "foot";
+  }
+  .app > aside{display:none}
+}`},
+  {id:'sample-truncate',title:'Truncate Text Cleanly',lang:'CSS',code:`/* One line */
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Exactly N lines, with an ellipsis on the last one */
+.clamp{
+  display:-webkit-box;
+  -webkit-line-clamp:3;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+
+/* Long URLs and code that would otherwise blow out the layout */
+.break-anywhere{overflow-wrap:anywhere;word-break:break-word}`},
+  {id:'sample-php-pdo',title:'PHP: Safe PDO Query',lang:'PHP',code:`<?php
+// Prepared statements are the whole defence against SQL injection.
+$pdo = new PDO(
+    'mysql:host=localhost;dbname=a_devtools;charset=utf8mb4',
+    $user,
+    $pass,
+    [
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES   => false,
+    ]
+);
+
+$stmt = $pdo->prepare('SELECT id, name FROM projects WHERE owner_id = ? ORDER BY updated_at DESC');
+$stmt->execute([$ownerId]);
+
+foreach ($stmt as $row) {
+    echo htmlspecialchars($row['name'], ENT_QUOTES, 'UTF-8'), "\n";
+}`},
+  {id:'sample-php-json',title:'PHP: JSON API Endpoint',lang:'PHP',code:`<?php
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
+
+try {
+    $raw   = file_get_contents('php://input');
+    $input = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+    if (empty($input['name'])) {
+        http_response_code(422);
+        echo json_encode(['error' => 'Name is required.']);
+        exit;
+    }
+
+    // ... save it ...
+
+    echo json_encode(['ok' => true, 'id' => 12]);
+} catch (JsonException $e) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Body must be valid JSON.']);
+}`},
+  {id:'sample-css-vars',title:'Theme Tokens with CSS Variables',lang:'CSS',code:`:root{
+  --bg:#f5f6f8;
+  --surface:#fff;
+  --text:#15171a;
+  --muted:#68707a;
+  --border:#e3e6ea;
+  --accent:#111214;
+  --radius:12px;
+}
+
+body.dark{
+  --bg:#0e0f10;
+  --surface:#151718;
+  --text:#f3f4f5;
+  --muted:#9ca3aa;
+  --border:#2a2e32;
+  --accent:#f3f4f5;
+}
+
+.card{
+  background:var(--surface);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+}
+
+/* Derive related shades instead of hand-picking them */
+.card--accent{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}`},
+  {id:'sample-a11y',title:'Accessibility Starter Kit',lang:'HTML + CSS',code:`<a class="skip" href="#main">Skip to main content</a>
+<main id="main" tabindex="-1">
+  <h1>One h1 per page</h1>
+  <button aria-expanded="false" aria-controls="panel">Details</button>
+  <div id="panel" hidden>Toggled content.</div>
+  <img src="chart.png" alt="Revenue rose from 2 to 9 million across 2024">
+  <span class="sr-only">Read by screen readers, invisible on screen.</span>
+</main>
+<style>
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:12px;top:12px;padding:10px 14px;background:#111;color:#fff;border-radius:8px;z-index:99}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>`}
+];
+
+/* Sample seeding is turned off — Your Library now only ever holds what you
+   explicitly click Save on. This runs once to strip out any sample-* items
+   an earlier version already added, then never runs again. */
 function ensureSampleSnippets(){
-  const existing=store.get('snippets'); if(existing.length)return;
-  store.set('snippets',[
-    {id:'sample-sidebar',title:'Responsive Sidebar',lang:'HTML + CSS',code:`<aside class="sidebar"><a class="active">Dashboard</a><a>Projects</a><a>Settings</a></aside><main class="content"><h1>Responsive workspace</h1><p>Resize the page to test the layout.</p></main><style>body{margin:0;font:14px system-ui}.sidebar{position:fixed;width:210px;height:100vh;padding:20px;background:#fff;border-right:1px solid #ddd}.sidebar a{display:block;padding:10px;border-radius:8px}.active{background:#eee}.content{margin-left:250px;padding:35px}@media(max-width:700px){.sidebar{position:relative;width:auto;height:auto}.content{margin-left:0}}</style>`},
-    {id:'sample-cards',title:'Responsive Card Grid',lang:'CSS',code:`.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}.card{padding:20px;border:1px solid #ddd;border-radius:14px;background:#fff}`},
-    {id:'sample-modal',title:'Simple Modal',lang:'HTML + JS',code:`<button onclick="openModal()">Open</button><div id="modal" class="modal" hidden><div class="box"><button onclick="closeModal()">Close</button><h2>Hello</h2><p>Working JavaScript modal.</p></div></div><style>.modal{position:fixed;inset:0;background:#0008;display:grid;place-items:center}.box{background:#fff;padding:25px;border-radius:14px}</style><script>function openModal(){document.getElementById('modal').hidden=false}function closeModal(){document.getElementById('modal').hidden=true}</script>`}
-  ]);
+  if(localStorage.getItem('samplesRemoved')==='true')return;
+  const list=store.get('snippets');
+  const kept=list.filter(x=>!String(x.id).startsWith('sample-'));
+  if(kept.length!==list.length){
+    store.set('snippets',kept);
+    list.filter(x=>String(x.id).startsWith('sample-')).forEach(x=>diskDeleteItem('snippets',x.id));
+  }
+  localStorage.setItem('samplesRemoved','true');
 }
 function snippetForm(editId){
   const list=store.get('snippets'),item=editId?list.find(x=>String(x.id)===String(editId)):null;
@@ -266,9 +514,26 @@ $('#snippetGrid')?.addEventListener('click',e=>{const b=e.target.closest('button
 $$('.view-btn').forEach(btn=>btn.addEventListener('click',()=>{$$('.view-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$('#snippetGrid')?.classList.toggle('snippet-list',btn.dataset.view==='list');localStorage.setItem('snippetView',btn.dataset.view)}));
 if(localStorage.getItem('snippetView')==='list')$('.view-btn[data-view="list"]')?.click();
 $$('.run-template').forEach(btn=>btn.addEventListener('click',()=>runStarter(btn.dataset.template)));
+function saveStarterToLibrary(key){
+  const t=starterTemplates[key];if(!t)return;
+  const id='starter-'+key;
+  const list=store.get('snippets');
+  if(list.some(x=>String(x.id)===id)){toast(t.title+' is already in your snippets');return}
+  const item={id,title:t.title,lang:t.lang,code:t.code,createdAt:Date.now()};
+  list.unshift(item);
+  store.set('snippets',list);
+  diskSaveItem('snippets',item);
+  activity('Saved starter: '+t.title);
+  markGs('savedSnippet');
+  renderSnippets();updateCounts();
+  toast(t.title+' saved to Snippets');
+}
+$$('.save-template').forEach(btn=>btn.addEventListener('click',()=>saveStarterToLibrary(btn.dataset.template)));
 $$('.preview-template').forEach(btn=>btn.addEventListener('click',()=>{const t=starterTemplates[btn.dataset.template];if(!t)return;markGs('viewedSnippet');openModal(`<div class="modal-preview-head"><div><span class="section-kicker">${escapeHtml(t.lang)}</span><h2>${escapeHtml(t.title)}</h2></div><button class="primary-btn" data-run-template="${escapeAttr(btn.dataset.template)}"><i class="bx bx-play"></i> Run in Playground</button></div>${buildCodePreviewMarkup(t.code,'preview-code-large')}`)}));
 modal?.addEventListener('click',e=>{
   const close=e.target.closest('[data-close-modal]');if(close)closeModal();
+  const expConfirm=e.target.closest('[data-exp-confirm]');if(expConfirm && typeof window.__expConfirmHandler==='function')window.__expConfirmHandler();
+  const expCancel=e.target.closest('[data-exp-cancel]');if(expCancel && typeof window.__expCancelHandler==='function')window.__expCancelHandler();
   const run=e.target.closest('[data-run-template]');if(run)runStarter(run.dataset.runTemplate);
   const runSnippetBtn=e.target.closest('[data-run-snippet]');if(runSnippetBtn){const x=store.get('snippets').find(i=>String(i.id)===String(runSnippetBtn.dataset.runSnippet));if(x)savePlaygroundPayload({code:x.code,lang:x.lang},x.title)}
   const copyPrev=e.target.closest('[data-copy-preview]');if(copyPrev)copySnippet(copyPrev.dataset.copyPreview);
@@ -512,6 +777,17 @@ document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLower
 $('#quickCommand')?.addEventListener('click',()=>$('#globalSearch')?.focus());
 $('#globalSearch')?.addEventListener('input',e=>{const q=e.target.value.toLowerCase().trim();if(location.search.includes('page=snippets')){const local=$('#snippetSearch');if(local){local.value=q;renderSnippets();return}}document.querySelectorAll('.project-card,.snippet-card,.note-card,.quick-card').forEach(x=>x.style.display=!q||x.textContent.toLowerCase().includes(q)?'':'none')});
 $('#clearData')?.addEventListener('click',()=>{if(confirm('Clear projects, snippets, notes and activity?')){['projects','snippets','notes','activity'].forEach(k=>localStorage.removeItem(k));location.reload()}});
+
+/* components.js runs in its own scope and needs these to save components
+   into the Snippets library (and to mirror that save to disk) — without
+   this, clicking "Save" on a UI Component throws "store is not defined"
+   and silently does nothing. */
+window.store=store;
+window.diskSaveItem=diskSaveItem;
+window.toast=toast;
+window.activity=activity;
+window.savePlaygroundPayload=savePlaygroundPayload;
+window.buildCodePreviewMarkup=buildCodePreviewMarkup;
 })();
 
 /* Beginner guide interactions */
@@ -540,6 +816,11 @@ $('#clearData')?.addEventListener('click',()=>{if(confirm('Clear projects, snipp
 /* Accessibility + beginner-friendly additions */
 (function(){
   const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+  /* This IIFE runs as its own scope, separate from the DISK_ENDPOINT/CSRF_TOKEN
+     declared near the top of the file — redeclare them here so the disk-sync
+     calls below (set-expertise, logout) don't throw a ReferenceError. */
+  const DISK_ENDPOINT='save-data.php';
+  const CSRF_TOKEN=typeof window!=='undefined'&&window.CSRF_TOKEN?window.CSRF_TOKEN:null;
 
   /* --- Text size control (A- / A+), persisted --- */
   const SIZE_STEPS=['base','lg','xl'];
@@ -592,53 +873,76 @@ $('#clearData')?.addEventListener('click',()=>{if(confirm('Clear projects, snipp
      tips, the playground guide steps, and the welcome tour) tailor itself to
      the visitor instead of showing the same beginner hand-holding to everyone. */
   const EXPERIENCE_LEVELS=[
-    {key:'beginner',label:'Beginner',icon:'bx-seedling',desc:"New to building web pages. Show step-by-step guidance and start with the welcome tour."},
-    {key:'intermediate',label:'Intermediate',icon:'bx-trending-up',desc:'Know the basics already. Pass a short exam to unlock this title and keep helpful tips on screen.'},
-    {key:'professional',label:'Professional',icon:'bx-medal',desc:'Experienced developer. Pass a short exam to unlock this title and hide the extra guidance.'}
+    {key:'beginner',label:'Beginner',icon:'bx-seedling',desc:"Just starting out with web development. We'll walk you through everything step-by-step, starting with a friendly welcome tour."},
+    {key:'intermediate',label:'Intermediate',icon:'bx-trending-up',desc:'Comfortable with the fundamentals and ready to build. Pass a quick one-question check to unlock this title and keep bite-sized tips within reach.'},
+    {key:'professional',label:'Professional',icon:'bx-medal',desc:'A seasoned developer who knows the ropes. Pass a quick one-question check to unlock this title and enjoy a clean, distraction-free workspace.'}
   ];
+  function levelNeedsExam(level){return level==='intermediate'||level==='professional'}
+  function examAlreadyPassed(level){return localStorage.getItem('examPassed_'+level)==='true'}
   function experienceHtml(selected){
-    return `<h2 id="modalTitle">How experienced are you?</h2><p class="modal-subtitle">Pick the option that fits best. This decides how much guidance A-DevTools shows you — you can change it anytime in Settings.</p>
-    <div class="experience-choices">${EXPERIENCE_LEVELS.map(l=>`<button type="button" class="experience-card${selected===l.key?' selected':''}" data-level="${l.key}" aria-pressed="${selected===l.key}"><i class="bx ${l.icon}"></i><b>${l.label}</b><span>${l.desc}</span></button>`).join('')}</div>
+    return `<h2 id="modalTitle">How experienced are you?</h2><p class="modal-subtitle">Pick the option that fits best. This decides how much guidance A-DevTools shows you — you can change it anytime in Settings. Use the arrow keys to browse, Enter to pick.</p>
+    <div class="experience-choices" role="radiogroup" aria-label="Experience level">${EXPERIENCE_LEVELS.map(l=>{
+      const isCurrent=selected===l.key;
+      const earned=levelNeedsExam(l.key)&&examAlreadyPassed(l.key);
+      let chip='';
+      if(isCurrent) chip='<span class="card-chip chip-current"><i class="bx bx-check"></i>Current</span>';
+      else if(earned) chip='<span class="card-chip chip-earned"><i class="bx bx-medal"></i>Earned</span>';
+      else if(levelNeedsExam(l.key)) chip='<span class="card-chip chip-locked"><i class="bx bx-lock-alt"></i>Quick check</span>';
+      return `<button type="button" role="radio" class="experience-card${isCurrent?' selected':''}" data-level="${l.key}" aria-pressed="${isCurrent}" aria-checked="${isCurrent}"><div class="card-top"><i class="bx ${l.icon}"></i>${chip}</div><b>${l.label}</b><span>${l.desc}</span></button>`;
+    }).join('')}</div>
     <div class="modal-footer"><button class="primary-btn" id="experienceContinue"${selected?'':' disabled'}><i class="bx bx-check"></i> Continue</button></div>`;
   }
   function experienceLabel(level){return EXPERIENCE_LEVELS.find(l=>l.key===level)?.label||'Not set'}
-  function applyExperienceLevel(level){
+  /* --- Journey trail shown in Settings: beginner -> intermediate -> professional --- */
+  function renderLevelTrail(level){
+    const order=['beginner','intermediate','professional'];
+    const curIdx=order.indexOf(level);
+    $$('#levelTrail .level-trail-step').forEach((el,i)=>{
+      el.classList.toggle('done',i<=curIdx);
+      el.classList.toggle('current',i===curIdx);
+    });
+    $$('#levelTrail .level-trail-line').forEach((el,i)=>{el.classList.toggle('done',i<curIdx)});
+  }
+  function applyExperienceLevel(level,animate){
     document.documentElement.setAttribute('data-experience',level);
     localStorage.setItem('experienceLevel',level);
     document.cookie='experienceLevel='+encodeURIComponent(level)+'; path=/; max-age=31536000; samesite=lax';
+    fetch(DISK_ENDPOINT+'?action=set-expertise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level,csrf:CSRF_TOKEN})}).catch(()=>{});
     const badge=$('#experienceBadge'); if(badge) badge.textContent=experienceLabel(level);
     const btnLabel=$('#experienceBtnLabel'); if(btnLabel) btnLabel.textContent=experienceLabel(level);
+    const btnIcon=$('#experienceBtnIcon');
+    if(btnIcon) btnIcon.className='bx '+(EXPERIENCE_LEVELS.find(l=>l.key===level)?.icon||'bx-user-voice');
+    renderLevelTrail(level);
     const steps=$('#playgroundGuideSteps'), toggle=$('.guide-toggle[data-target="playgroundGuideSteps"]');
     if(steps && toggle){
       const collapse=level==='professional';
       steps.hidden=collapse;
       toggle.innerHTML=collapse?'<i class="bx bx-chevron-down"></i> Show guide':'<i class="bx bx-chevron-up"></i> Hide guide';
     }
+    if(animate){
+      const btn=$('#experienceBtn');
+      if(btn){btn.classList.remove('level-pulse');void btn.offsetWidth;btn.classList.add('level-pulse')}
+      toast('Experience set to '+experienceLabel(level));
+    }
   }
   /* --- Level-up exam: Intermediate and Professional must be earned --- */
   /* Beginner is free to pick. Moving up to Intermediate or Professional asks
-     a short multiple-choice exam first; the title only "sticks" once passed.
-     A level earned once is remembered locally so it is never re-quizzed. */
+     a short general-AI-knowledge check first; the title only "sticks" once
+     passed. A level earned once is remembered locally so it is never re-quizzed. */
   const EXAMS={
     intermediate:{label:'Intermediate',passPct:70,questions:[
-      {q:'Which CSS property changes the text color of an element?',options:['background','color','font-style','text-decoration'],a:1},
-      {q:'Which HTML tag is used to create a hyperlink?',options:['<link>','<a>','<href>','<nav>'],a:1},
-      {q:'What does "flex-direction: column" do inside a flex container?',options:['Stacks items side by side','Stacks items vertically, top to bottom','Hides items that overflow','Only reverses the item order'],a:1},
-      {q:'Which JavaScript array method adds an item to the end of an array?',options:['shift()','unshift()','push()','pop()'],a:2},
-      {q:'What does "box-sizing: border-box" change about an element?',options:['It removes all borders','It includes padding and border inside the element\u2019s set width/height','It makes corners rounded','It disables margins'],a:1},
-      {q:'Which CSS selector targets the element with id="header"?',options:['.header','#header','*header','header{}'],a:1}
+      {q:'Who develops Claude Code?',options:['OpenAI','Anthropic','Google DeepMind','Microsoft'],a:1},
+      {q:'Which company develops ChatGPT?',options:['Anthropic','Meta','OpenAI','Amazon'],a:2},
+      {q:'What does "LLM" stand for in AI?',options:['Large Language Model','Long Logic Machine','Linear Learning Method','Local Language Module'],a:0}
     ]},
     professional:{label:'Professional',passPct:70,questions:[
-      {q:'What is the key scoping difference between "let" and "var" in JavaScript?',options:['There is no real difference','let is block-scoped, var is function-scoped','var is block-scoped, let is function-scoped','let can never be reassigned'],a:1},
-      {q:'Which CSS Grid pattern builds a responsive grid without media queries?',options:['display:flex;flex-wrap:nowrap','grid-template-columns:repeat(auto-fit,minmax(200px,1fr))','float:left on every child','columns:3'],a:1},
-      {q:'What does JavaScript\u2019s Promise.all() do?',options:['Runs promises one at a time in order','Resolves once every promise resolves, or rejects if any one rejects','Cancels every pending promise','Only works together with async/await'],a:1},
-      {q:'What is "event delegation" in JavaScript?',options:['Removing every event listener at once','Attaching one listener to a parent element to catch events bubbling up from its children','Delaying an event with a timer','Binding an event only to the window object'],a:1},
-      {q:'Between PUT and POST, which HTTP method is idempotent?',options:['POST','PUT','Both are idempotent','Neither is idempotent'],a:1},
-      {q:'What does the CSS "will-change" property do?',options:['Instantly applies a new value to a property','Hints to the browser that a property is about to change, so it can optimize rendering','Reverts a property to its default value','Disables transitions on an element'],a:1}
+      {q:'Who develops Claude Code?',options:['OpenAI','Anthropic','Google DeepMind','Microsoft'],a:1},
+      {q:'Which company develops the Gemini model family?',options:['OpenAI','Anthropic','Google DeepMind','xAI'],a:2},
+      {q:'Which family of AI models does Codex belong to, and who develops it?',options:['OpenAI','Anthropic','Alibaba','Meta'],a:0},
+      {q:'Which Chinese tech company develops the Qwen AI model family?',options:['Tencent','Baidu','Alibaba','ByteDance'],a:2},
+      {q:'What technique is widely credited with enabling modern LLMs, introduced in the 2017 paper "Attention Is All You Need"?',options:['Convolutional networks','The Transformer architecture','Decision trees','Recurrent memory cells'],a:1}
     ]}
   };
-  function levelNeedsExam(level){return level==='intermediate'||level==='professional'}
-  function examAlreadyPassed(level){return localStorage.getItem('examPassed_'+level)==='true'}
   let examSession=null;
   function examQuestionCard(){
     const cfg=EXAMS[examSession.level],i=examSession.qIndex,total=cfg.questions.length,q=cfg.questions[i];
@@ -647,6 +951,7 @@ $('#clearData')?.addEventListener('click',()=>{if(confirm('Clear projects, snipp
     <div class="exam-progress"><div class="exam-progress-bar"><div class="exam-progress-fill" style="width:${pct}%"></div></div><span class="exam-progress-count">Question ${i+1} of ${total}</span></div>
     <div class="exam-question">${q.q}</div>
     <div class="exam-options">${q.options.map((opt,idx)=>`<button type="button" class="exam-option${picked===idx?' selected':''}" data-opt="${idx}" aria-pressed="${picked===idx}"><span class="opt-letter">${letters[idx]}</span><span>${opt}</span></button>`).join('')}</div>
+    <div class="exam-kbd-hint"><i class="bx bx-keyboard"></i> Press 1\u2013${q.options.length} to answer \u00b7 Enter for next</div>
     <div class="modal-footer"><button class="ghost-btn" id="examBack"><i class="bx bx-chevron-left"></i> ${i===0?'Cancel':'Back'}</button><button class="primary-btn" id="examNext"${picked==null?' disabled':''}>${i===total-1?'Finish exam':'Next question'} <i class="bx bx-chevron-right"></i></button></div>`;
   }
   function renderExamQuestion(){
@@ -682,49 +987,129 @@ $('#clearData')?.addEventListener('click',()=>{if(confirm('Clear projects, snipp
       const ring=$('.score-ring'),num=$('#scoreNum');
       if(ring) ring.style.setProperty('--pct',pct);
       if(num){let cur=0;const step=Math.max(1,Math.round(pct/24));const t=setInterval(()=>{cur=Math.min(pct,cur+step);num.textContent=cur+'%';if(cur>=pct)clearInterval(t)},20)}
+      if(passed && ring) setTimeout(()=>launchConfetti(ring),350);
     });
     $('#examContinue')?.addEventListener('click',()=>{const onPass=examSession.onPass;examSession=null;onPass()});
     $('#examRetry')?.addEventListener('click',()=>{examSession.qIndex=0;examSession.answers=[];renderExamQuestion()});
     $('#examChooseOther')?.addEventListener('click',()=>{const onBack=examSession.onBack;examSession=null;onBack()});
   }
   function startExam(level,onPass,onBack){examSession={level,qIndex:0,answers:[],onPass,onBack};renderExamQuestion()}
+  /* Keyboard shortcuts during the exam: number keys pick an answer, Enter
+     advances, Backspace goes back \u2014 lets a confident test-taker fly through
+     without reaching for the mouse. */
+  document.addEventListener('keydown',e=>{
+    if(!examSession || !modal || !modal.classList.contains('show'))return;
+    if(e.key>='1'&&e.key<='6'){
+      const opt=$$('.exam-option')[Number(e.key)-1];
+      if(opt){e.preventDefault();opt.click()}
+    } else if(e.key==='Enter'){
+      const next=$('#examNext');
+      if(next && !next.disabled){e.preventDefault();next.click()}
+    } else if(e.key==='Backspace'){
+      const back=$('#examBack');
+      if(back && document.activeElement?.tagName!=='INPUT'){e.preventDefault();back.click()}
+    }
+  });
+  /* A short, tasteful confetti burst to celebrate passing \u2014 pure CSS/JS,
+     no external dependency. Pieces remove themselves after the animation. */
+  function launchConfetti(container){
+    if(!container)return;
+    const colors=['#f2c94c','#6fcf97','#56ccf2','#bb6bd9','#f2994a'];
+    for(let i=0;i<22;i++){
+      const p=document.createElement('span');
+      p.className='confetti-piece';
+      p.style.background=colors[i%colors.length];
+      p.style.left=(38+Math.random()*24)+'%';
+      p.style.setProperty('--x',Math.round(Math.random()*180-90)+'px');
+      p.style.setProperty('--r',Math.round(Math.random()*340)+'deg');
+      p.style.setProperty('--d',(650+Math.random()*450)+'ms');
+      container.appendChild(p);
+      setTimeout(()=>p.remove(),1200);
+    }
+  }
+
+  /* --- Confirm-before-change modal --- */
+  /* Shown only when an existing level is being switched to a different one
+     (not on the very first pick, where there's nothing to confirm yet). */
+  function experienceChangeConfirmHtml(fromLabel,toLabel){
+    return `<h2 id="modalTitle">Change experience level?</h2>
+    <p class="modal-subtitle">You're switching from <b>${fromLabel}</b> to <b>${toLabel}</b>. This changes how much guidance and which tips are shown across your workspace.</p>
+    <div class="modal-footer"><button type="button" class="ghost-btn" data-exp-cancel><i class="bx bx-chevron-left"></i> Cancel</button><button type="button" class="primary-btn" data-exp-confirm><i class="bx bx-check"></i> Yes, change it</button></div>`;
+  }
 
   function openExperiencePicker(onDone){
     let chosen=localStorage.getItem('experienceLevel')||null;
     openModal(experienceHtml(chosen));
     const cont=$('#experienceContinue');
+    const choices=$('.experience-choices');
     $$('.experience-card').forEach(card=>card.addEventListener('click',()=>{
       chosen=card.getAttribute('data-level');
-      $$('.experience-card').forEach(c=>{c.classList.toggle('selected',c===card);c.setAttribute('aria-pressed',c===card?'true':'false')});
+      $$('.experience-card').forEach(c=>{
+        const isSel=c===card;
+        c.classList.toggle('selected',isSel);
+        c.setAttribute('aria-pressed',isSel?'true':'false');
+        c.setAttribute('aria-checked',isSel?'true':'false');
+      });
       if(cont) cont.disabled=false;
     }));
+    /* Arrow-key roaming across cards, so the whole picker works without a mouse */
+    choices?.addEventListener('keydown',e=>{
+      if(!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(e.key))return;
+      e.preventDefault();
+      const cards=$$('.experience-card');
+      const idx=cards.indexOf(document.activeElement);
+      if(idx===-1){cards[0]?.focus();return}
+      const dir=(e.key==='ArrowRight'||e.key==='ArrowDown')?1:-1;
+      cards[(idx+dir+cards.length)%cards.length].focus();
+    });
     cont?.addEventListener('click',()=>{
       if(!chosen)return;
-      const changed=chosen!==localStorage.getItem('experienceLevel');
-      const finish=()=>{
-        applyExperienceLevel(chosen);
-        closeModal();
-        if(typeof onDone==='function'){
-          onDone(chosen);
-        } else if(changed){
-          /* The Dashboard content AND the sidebar (Guided Tour quick tool,
-             "Local workspace · <level>" label) are rendered server-side per
-             level, so reload to actually show the page that matches the new
-             choice everywhere, not just update the badge text. */
-          location.reload();
+      const currentLevel=localStorage.getItem('experienceLevel');
+      const changed=chosen!==currentLevel;
+      const proceed=()=>{
+        const finish=()=>{
+          applyExperienceLevel(chosen,changed);
+          closeModal();
+          if(typeof onDone==='function'){
+            onDone(chosen);
+          } else if(changed){
+            /* The Dashboard content AND the sidebar (Guided Tour quick tool,
+               "Local workspace · <level>" label) are rendered server-side per
+               level, so reload to actually show the page that matches the new
+               choice everywhere, not just update the badge text. */
+            location.reload();
+          }
+        };
+        if(levelNeedsExam(chosen) && !examAlreadyPassed(chosen)){
+          startExam(chosen,finish,()=>openExperiencePicker(onDone));
+        } else {
+          finish();
         }
       };
-      if(levelNeedsExam(chosen) && !examAlreadyPassed(chosen)){
-        startExam(chosen,finish,()=>openExperiencePicker(onDone));
+      if(changed && currentLevel){
+        openModal(experienceChangeConfirmHtml(experienceLabel(currentLevel),experienceLabel(chosen)));
+        window.__expConfirmHandler=proceed;
+        window.__expCancelHandler=()=>openExperiencePicker(onDone);
       } else {
-        finish();
+        proceed();
       }
     });
   }
   $('#changeExperienceBtn')?.addEventListener('click',()=>openExperiencePicker());
   $('#experienceBtn')?.addEventListener('click',()=>openExperiencePicker());
+  $('#levelTrail')?.addEventListener('click',e=>{
+    if(e.target.closest('.level-trail-step')) openExperiencePicker();
+  });
 
-  const savedLevel=localStorage.getItem('experienceLevel');
+  /* The server value (database for logged-in accounts, falling back to the
+     cookie) is authoritative — it's what survives a cleared localStorage,
+     a browser switch, or a partial "clear site data". Reconcile it into
+     localStorage before anything below reads that as the source of truth,
+     so the Settings badge/topbar pill/sidebar label can never disagree. */
+  const serverLevel=(typeof window!=='undefined'&&window.SERVER_EXPERIENCE_LEVEL)?window.SERVER_EXPERIENCE_LEVEL:null;
+  const localLevel=localStorage.getItem('experienceLevel');
+  const savedLevel=serverLevel||localLevel||null;
+  if(savedLevel && savedLevel!==localLevel){ localStorage.setItem('experienceLevel',savedLevel) }
   if(savedLevel){
     applyExperienceLevel(savedLevel);
     if(!localStorage.getItem('tourSeen')){

@@ -13,6 +13,10 @@
  * export file is still the easiest way to move a workspace to another
  * computer or restore an older point in time. Only the day-to-day mirror
  * moved from JSON files to MySQL.
+ *
+ * The account's self-selected experience level (beginner / intermediate /
+ * professional) is mirrored here too, in `users.expertise_level`, purely
+ * as a reference field — it does not gate access to anything server-side.
  */
 require_once __DIR__ . '/security.php';
 adevtools_start_session();
@@ -209,6 +213,17 @@ try {
         file_put_contents($file, json_encode($snapshot, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
         respond(true, array('file' => basename($file), 'savedAt' => time() * 1000));
+    }
+
+    if ($action === 'set-expertise') {
+        $validLevels = array('beginner', 'intermediate', 'professional');
+        $level = isset($body['level']) ? $body['level'] : null;
+        if (!in_array($level, $validLevels, true)) {
+            respond(false, array('error' => 'Invalid expertise level'));
+        }
+        $pdo->prepare("UPDATE `users` SET `expertise_level` = ?, `expertise_set_at` = CURRENT_TIMESTAMP WHERE `id` = ?")
+            ->execute(array($level, $userId));
+        respond(true, array('level' => $level));
     }
 
     respond(false, array('error' => 'Unknown action'));
