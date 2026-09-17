@@ -123,7 +123,17 @@ This copies those three files into MySQL under that account. It's safe to run mo
 
 **Falling back to JSON files:** if you don't want to set up MySQL, revert `auth.php`, `auth-helpers.php` and `save-data.php` to file-based storage (accounts in `data/users.json`, workspace data in `data/*.json`, same approach as the original local-only version of this app) — ask whoever built this fork for that version, or keep a copy of it before migrating.
 
-## 11. Admin Control
+## 11. PHP Playground
+
+A-DevTools now has a second playground, alongside the HTML/CSS/JS one — a real PHP editor:
+
+- Open it from the **PHP Playground** item in the sidebar (or the shortcut card on the Dashboard).
+- It runs an actual PHP engine compiled to WebAssembly ([`php-wasm`](https://github.com/seanmorris/php-wasm)) directly inside your browser tab, downloaded once from a CDN the first time you open the page. Unlike the HTML/CSS/JS Playground, this one really executes PHP — variables, loops, functions, classes, closures and more all run for real.
+- Pick a starter from the dropdown (Hello World, variables, loops, arrays, functions, string functions, classes, recursion, sorting, closures, date/time, JSON) or write your own, then press **Run code** to see the output on the right.
+- Your code is remembered locally per account between visits, the same way the other editors are.
+- This sandbox is isolated from your computer: it can't read or write files, and it can't reach the `a_devtools` MySQL database — it's meant for learning core PHP syntax, not for testing the rest of this app. The first page load needs an internet connection (to fetch the PHP engine); after that, running code needs no network access at all.
+
+## 12. Admin Control
 
 A-DevTools has a project-wide admin panel, opened from the **shield icon in the landing page footer** (bottom-right, next to the copyright line). It's only reachable there, while logged out — a logged-in visitor is sent straight to the dashboard and never sees it.
 

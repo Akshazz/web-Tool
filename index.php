@@ -31,6 +31,8 @@ if (!$currentUser) {
 $pages = array(
     'dashboard' => 'Dashboard',
     'code' => 'Code Playground',
+    'php' => 'PHP Playground',
+    'sql' => 'SQL Playground',
     'components' => 'UI Components',
     'snippets' => 'Snippets',
     'projects' => 'Projects',
@@ -64,12 +66,16 @@ $experienceLabel = isset($experienceLabels[$experienceLevel]) ? $experienceLabel
 $cssVersion = file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : time();
 $jsVersion  = file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : time();
 $componentsVersion = file_exists(__DIR__ . '/assets/js/components.js') ? filemtime(__DIR__ . '/assets/js/components.js') : time();
+$phpPlaygroundVersion = file_exists(__DIR__ . '/assets/js/php-playground.js') ? filemtime(__DIR__ . '/assets/js/php-playground.js') : time();
+$sqlPlaygroundVersion = file_exists(__DIR__ . '/assets/js/sql-playground.js') ? filemtime(__DIR__ . '/assets/js/sql-playground.js') : time();
 $i18nVersion = file_exists(__DIR__ . '/assets/js/i18n.js') ? filemtime(__DIR__ . '/assets/js/i18n.js') : time();
 $pwaVersion  = file_exists(__DIR__ . '/assets/js/pwa.js') ? filemtime(__DIR__ . '/assets/js/pwa.js') : time();
 function e($value) { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
 $icons = array(
     'dashboard' => 'bx bx-grid-alt',
     'code' => 'bx bx-code-alt',
+    'php' => 'bx bxl-php',
+    'sql' => 'bx bx-data',
     'components' => 'bx bx-layer',
     'snippets' => 'bx bx-code-curly',
     'projects' => 'bx bx-folder-open',
@@ -93,6 +99,7 @@ $icons = array(
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="A-DevTools">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<?php if ($page === 'php'): ?><link rel="preconnect" href="https://cdn.jsdelivr.net"><?php endif; ?>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/boxicons/2.1.4/css/boxicons.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
@@ -271,6 +278,7 @@ $icons = array(
             </div>
                             <section class="panel"><div class="panel-head"><h2>Shortcuts</h2><span class="muted"><kbd>Ctrl K</kbd> for command palette</span></div><div class="quick-grid">
                     <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
+                    <a href="?page=php" class="quick-card"><b><i class="bx bxl-php"></i></b><span data-i18n="quick.php">PHP Playground</span><small data-i18n="quick.phpDesc">Run real PHP in your browser</small></a>
                     <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
                     <a href="?page=snippets" class="quick-card"><b><i class="bx bx-code-curly"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
                     <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
@@ -344,6 +352,7 @@ $icons = array(
             </div>
                             <section class="panel"><div class="panel-head"><h2>Quick start</h2></div><div class="quick-grid">
                     <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
+                    <a href="?page=php" class="quick-card"><b><i class="bx bxl-php"></i></b><span data-i18n="quick.php">PHP Playground</span><small data-i18n="quick.phpDesc">Run real PHP in your browser</small></a>
                     <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
                     <a href="?page=snippets" class="quick-card"><b><i class="bx bx-code-curly"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
                     <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
@@ -430,6 +439,7 @@ $icons = array(
             </section>
                             <section class="panel"><div class="panel-head"><h2>Quick start</h2></div><div class="quick-grid">
                     <a href="?page=code" class="quick-card"><b><i class="bx bx-code-alt"></i></b><span data-i18n="quick.code">Code Playground</span><small data-i18n="quick.codeDesc">Write and preview HTML/CSS/JS</small></a>
+                    <a href="?page=php" class="quick-card"><b><i class="bx bxl-php"></i></b><span data-i18n="quick.php">PHP Playground</span><small data-i18n="quick.phpDesc">Run real PHP in your browser</small></a>
                     <a href="?page=components" class="quick-card"><b><i class="bx bx-layer"></i></b><span data-i18n="quick.components">UI Components</span><small data-i18n="quick.componentsDesc">Reusable interface patterns</small></a>
                     <a href="?page=snippets" class="quick-card"><b><i class="bx bx-code-curly"></i></b><span data-i18n="quick.snippets">Snippets</span><small data-i18n="quick.snippetsDesc">Save frequently used code</small></a>
                     <a href="?page=notes" class="quick-card"><b><i class="bx bx-note"></i></b><span data-i18n="quick.notes">Development Notes</span><small data-i18n="quick.notesDesc">Keep ideas and references</small></a>
@@ -461,7 +471,6 @@ $icons = array(
         <?php elseif ($page === 'code'): ?>
             <section class="page-head playground-head">
                 <div><div class="eyebrow" data-i18n="code.eyebrow">LEARN · BUILD · RUN</div><h1 data-i18n="code.title">Code Playground</h1><p data-i18n="code.subtitle">New to coding? Follow the 4 steps below. You can change the example safely and see the result immediately.</p></div>
-                <div class="playground-actions"><span class="run-status" id="runStatus"><i></i> Ready</span><button class="ghost-btn" id="resetCode"><i class="bx bx-reset"></i> <span data-i18n="code.reset">Reset</span></button><button class="primary-btn" id="runCode"><i class="bx bx-play"></i> <span data-i18n="code.run">Run my code</span></button></div>
             </section>
             <section class="beginner-guide panel" id="playgroundGuide">
                 <div class="guide-intro"><div><span class="section-kicker">BEGINNER GUIDE</span><h2>Your first playground test</h2><p>You do not need to understand everything at once. Start with the HTML, change one word, press <b>Run my code</b>, then check the preview.</p></div><button class="small-btn guide-toggle" data-target="playgroundGuideSteps"><i class="bx bx-chevron-up"></i> Hide guide</button></div>
@@ -505,14 +514,73 @@ button:hover{transform:translateY(-1px)}</textarea>
                     <div class="editor-statusbar"><span><i class="bx bx-check-circle"></i> Local sandbox</span><span id="charCount">0 chars</span></div>
                 </div>
                 <div class="preview-panel">
-                    <div class="preview-head"><div><span class="preview-live-dot"></span><strong>LIVE PREVIEW</strong><small id="previewMeta">Sandboxed iframe</small></div><div class="preview-tools"><button class="device-btn active" data-device="desktop" title="Desktop preview" aria-pressed="true"><i class="bx bx-desktop"></i></button><button class="device-btn" data-device="tablet" title="Tablet preview" aria-pressed="false"><i class="bx bx-mobile-alt"></i></button><button class="device-btn" data-device="mobile" title="Mobile preview" aria-pressed="false"><i class="bx bx-mobile"></i></button><button class="ghost-btn" id="openPreview"><i class="bx bx-window-open"></i> Open</button></div></div>
-                    <div class="preview-stage" id="previewStage"><iframe id="preview" sandbox="allow-scripts"></iframe></div>
+                    <div class="preview-head"><div class="preview-head-label"><span class="preview-live-dot"></span><strong>LIVE</strong><small id="previewMeta">Sandboxed iframe</small><span class="run-status" id="runStatus"><i></i> Ready</span></div><div class="preview-tools"><div class="preview-tools-actions"><button class="ghost-btn" id="resetCode"><i class="bx bx-reset"></i> <span data-i18n="code.reset">Reset</span></button><button class="primary-btn" id="runCode"><i class="bx bx-play"></i> <span data-i18n="code.run">Run my code</span></button></div><div class="device-switch"><button class="device-btn active" data-device="desktop" title="Desktop preview" aria-pressed="true"><i class="bx bx-desktop"></i></button><button class="device-btn" data-device="tablet" title="Tablet preview" aria-pressed="false"><i class="bx bx-mobile-alt"></i></button><button class="device-btn" data-device="mobile" title="Mobile preview" aria-pressed="false"><i class="bx bx-mobile"></i></button></div><button class="ghost-btn" id="openPreview" title="Open in new tab"><i class="bx bx-window-open"></i> <span class="open-label">Open</span></button></div></div>
+                    <div class="preview-stage" id="previewStage"><div class="device-frame" id="deviceFrame"><div class="device-frame-bar" id="deviceFrameBar"><span class="device-dot" style="background:#ff5f57"></span><span class="device-dot" style="background:#febc2e"></span><span class="device-dot" style="background:#28c840"></span><span class="device-frame-url">preview</span></div><div class="device-frame-body" id="deviceFrameBody"><iframe id="preview" sandbox="allow-scripts"></iframe></div></div></div>
                 </div>
             </div>
             <section class="panel playground-leaderboard">
                 <div class="panel-head"><h2><i class="bx bx-trophy"></i> Most Popular</h2><span class="points-summary">Rank: <span id="pointsRankVal">Junior Developer <span class="rank-sub-badge rank-junior">V</span></span> &nbsp;·&nbsp; <b id="pointsTotalVal">0</b> XP total</span></div>
                 <div id="leaderboardList" class="leaderboard-list"><div class="empty">Run a starter or a snippet to see rankings here.</div></div>
             </section>
+        <?php elseif ($page === 'php'): ?>
+            <section class="page-head playground-head">
+                <div><div class="eyebrow" data-i18n="php.eyebrow">RUN REAL PHP</div><h1 data-i18n="php.title">PHP Playground</h1><p data-i18n="php.subtitle">Write real PHP and run it instantly. A full PHP engine runs locally in your browser &mdash; no server needed.</p></div>
+            </section>
+            <section class="beginner-guide panel" id="phpPlaygroundGuide">
+                <div class="guide-intro">
+                    <div><span class="section-kicker">HOW IT WORKS</span><h2>Real PHP, no XAMPP needed for this page</h2><p>This playground runs an actual PHP engine (compiled to WebAssembly) directly inside this browser tab. Pick a sample on the left of the editor, press <b>Run code</b>, and read the output on the right.</p></div>
+                </div>
+                <div class="guide-tip"><i class="bx bx-bulb"></i><div><strong>Good to know:</strong> this is for learning core PHP syntax — variables, loops, functions, classes and more. A built-in <code>getDb()</code> gives you a real PDO connection for practicing SQL (SELECT/INSERT/UPDATE/DELETE), backed by a private SQLite database that lives only in this browser tab. It's seeded with sample data and resets on reload — it never reaches your real MySQL database. For the rest of A-DevTools (accounts, saved data), keep using Apache/XAMPP as usual.</div></div>
+            </section>
+            <div class="playground-shell php-playground-shell">
+                <div class="editor-panel">
+                    <div class="editor-topbar">
+                        <div class="editor-file"><span class="file-dot php" id="phpFileDot"></span><strong>playground.php</strong><small id="phpEditorDirty">Local only</small></div>
+                        <div class="editor-tools">
+                            <select class="filter-select php-sample-select" id="phpSampleSelect" aria-label="Sample snippet"></select>
+                        </div>
+                    </div>
+                    <div class="editor-body">
+                        <textarea id="phpCode" class="code-editor" spellcheck="false" aria-label="PHP editor"></textarea>
+                    </div>
+                    <div class="editor-statusbar"><span><i class="bx bx-check-circle"></i> Runs in your browser (WebAssembly) — nothing is sent to a server</span><span id="phpCharCount">0 chars</span></div>
+                </div>
+                <div class="preview-panel">
+                    <div class="preview-head"><div class="preview-head-label"><span class="preview-live-dot" id="phpOutputDot"></span><strong>OUTPUT</strong><small>stdout / stderr</small><span class="run-status" id="phpEngineStatus"><i class="engine-loading" style="background:#f59e0b"></i> <span id="phpEngineStatusText">Loading engine…</span></span></div><div class="preview-tools"><div class="preview-tools-actions"><button class="ghost-btn" id="phpReset"><i class="bx bx-reset"></i> <span data-i18n="php.reset">Reset</span></button><button class="primary-btn" id="phpRun" disabled><i class="bx bx-play"></i> <span data-i18n="php.run">Run code</span></button><button class="ghost-btn" id="phpClearOutput"><i class="bx bx-eraser"></i> Clear</button></div></div></div>
+                    <div class="preview-stage php-console-stage"><pre id="phpConsole" class="php-console"><span class="php-console-placeholder">Run your code to see the output here…</span></pre></div>
+                </div>
+            </div>
+        <?php elseif ($page === 'sql'): ?>
+            <section class="page-head playground-head">
+                <div><div class="eyebrow" data-i18n="sql.eyebrow">RUN REAL SQL</div><h1 data-i18n="sql.title">SQL Playground</h1><p data-i18n="sql.subtitle">Write MySQL-style queries against a sample store database and see the result set instantly &mdash; no XAMPP, no server, nothing to set up.</p></div>
+            </section>
+            <section class="beginner-guide panel" id="sqlPlaygroundGuide">
+                <div class="guide-intro">
+                    <div><span class="section-kicker">HOW IT WORKS</span><h2>A practice database that lives in this tab</h2><p>Pick a sample query on the left, press <b>Run query</b> (or <kbd>Ctrl</kbd> + <kbd>Enter</kbd>), and the rows come back on the right. Write several statements separated by semicolons and each one gets its own result block. Your edits to the data stick around until you press <b>Reset database</b> or reload the page.</p></div>
+                </div>
+                <div class="guide-tip"><i class="bx bx-bulb"></i><div><strong>About the engine:</strong> a MySQL <em>server</em> can't run inside a browser, so queries execute against a private SQLite database in the same WebAssembly sandbox as the PHP playground, taught to speak MySQL &mdash; <code>NOW()</code>, <code>CONCAT()</code>, <code>IF()</code>, <code>DATE_FORMAT()</code>, <code>YEAR()</code>, <code>SHOW TABLES</code> and <code>DESCRIBE</code> all work, and <code>AUTO_INCREMENT</code>/<code>ENGINE=</code> in your DDL are accepted. Everyday MySQL runs unchanged; server-only features (stored procedures, users and grants, <code>ENUM</code>) do not. Nothing here touches your real MySQL database.</div></div>
+            </section>
+            <div class="playground-shell sql-playground-shell">
+                <div class="editor-panel">
+                    <div class="editor-topbar">
+                        <div class="editor-file"><span class="file-dot sql" id="sqlFileDot"></span><strong>query.sql</strong><small id="sqlEditorDirty">Local only</small></div>
+                        <div class="editor-tools">
+                            <select class="filter-select php-sample-select" id="sqlSampleSelect" aria-label="Sample query"></select>
+                        </div>
+                    </div>
+                    <div class="editor-body">
+                        <textarea id="sqlCode" class="code-editor" spellcheck="false" aria-label="SQL editor" placeholder="SELECT * FROM customers;"></textarea>
+                    </div>
+                    <div class="editor-statusbar"><span><i class="bx bx-check-circle"></i> <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to run &mdash; nothing is sent to a server</span><span id="sqlCharCount">0 chars</span></div>
+                </div>
+                <div class="preview-panel">
+                    <div class="preview-head"><div class="preview-head-label"><span class="preview-live-dot" id="sqlOutputDot"></span><strong>RESULT</strong><small>result set</small><span class="run-status" id="sqlEngineStatus"><i class="engine-loading" style="background:#f59e0b"></i> <span id="sqlEngineStatusText">Loading engine&hellip;</span></span></div><div class="preview-tools"><div class="preview-tools-actions"><button class="ghost-btn" id="sqlResetDb" title="Rebuild the sample database"><i class="bx bx-refresh"></i> <span data-i18n="sql.resetDb">Reset database</span></button><button class="ghost-btn" id="sqlReset"><i class="bx bx-reset"></i> <span data-i18n="sql.reset">Reset query</span></button><button class="primary-btn" id="sqlRun" disabled><i class="bx bx-play"></i> <span data-i18n="sql.run">Run query</span></button><button class="ghost-btn" id="sqlClearOutput"><i class="bx bx-eraser"></i> Clear</button></div></div></div>
+                    <div class="preview-stage sql-result-stage">
+                        <div class="sql-results" id="sqlResults"><div class="sql-placeholder">Run a query to see your result set here&hellip;</div></div>
+                        <aside class="sql-schema-panel"><div class="sql-schema-head"><i class="bx bx-sitemap"></i> Tables</div><div id="sqlSchema"><div class="muted">Loading&hellip;</div></div></aside>
+                    </div>
+                </div>
+            </div>
         <?php elseif ($page === 'components'): ?>
             <section class="page-head">
                 <div>
@@ -660,6 +728,12 @@ window.SERVER_POINTS = <?php echo json_encode($serverPoints); ?>;</script>
 <script src="assets/js/i18n.js?v=<?php echo $i18nVersion; ?>"></script>
 <?php if ($page === 'components'): ?>
 <script src="assets/js/components.js?v=<?php echo $componentsVersion; ?>"></script>
+<?php endif; ?>
+<?php if ($page === 'php'): ?>
+<script src="assets/js/php-playground.js?v=<?php echo $phpPlaygroundVersion; ?>"></script>
+<?php endif; ?>
+<?php if ($page === 'sql'): ?>
+<script src="assets/js/sql-playground.js?v=<?php echo $sqlPlaygroundVersion; ?>"></script>
 <?php endif; ?>
 <script src="assets/js/pwa.js?v=<?php echo $pwaVersion; ?>"></script>
 </body>

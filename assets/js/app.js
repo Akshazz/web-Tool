@@ -1055,7 +1055,10 @@ ensureSampleSnippets();renderProjects();renderSnippets();renderNotes();renderAct
 const tabs=$$('.tab');
 const DEFAULT_HTML=`<!doctype html>
 <html>
-<head><meta charset="utf-8"></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
 <body>
   <main class="demo">
     <span class="eyebrow">DEV DESK</span>
@@ -1076,6 +1079,22 @@ button:hover{transform:translateY(-1px)}`;
 const DEFAULT_JS=`document.getElementById('demoButton')?.addEventListener('click',()=>{
   document.getElementById('demoButton').textContent='It works!';
 });`;
+
+// Guarantees any HTML rendered in the preview (and in the "Open" tab, which is
+// what a real phone browser loads) behaves like a normal responsive page:
+// adds a viewport meta tag + a couple of safe defaults when the user's own
+// markup does not already include them. This is what keeps the mobile view
+// from rendering "zoomed out" like a desktop page (the classic no-viewport
+// mobile browser fallback that produces the letterboxed look with colored
+// bars on the sides).
+function ensureResponsiveDoc(htmlStr){
+  var meta='<meta name="viewport" content="width=device-width, initial-scale=1">';
+  var baseStyle='<style>html{-webkit-text-size-adjust:100%}img,video,canvas,svg,table{max-width:100%}body{overflow-x:hidden}</style>';
+  if(/<meta[^>]+viewport/i.test(htmlStr)) return htmlStr;
+  if(/<head[^>]*>/i.test(htmlStr)) return htmlStr.replace(/<head[^>]*>/i,function(m){return m+meta+baseStyle});
+  if(/<html[^>]*>/i.test(htmlStr)) return htmlStr.replace(/<html[^>]*>/i,function(m){return m+'<head>'+meta+baseStyle+'</head>'});
+  return meta+baseStyle+htmlStr;
+}
 
 var cmHtml=null,cmCss=null,cmJs=null,wrapEnabled=true;
 function setEditorDirty(text){const el=$('#editorDirty');if(el)el.textContent=text}
@@ -1242,7 +1261,7 @@ function runCode(award){
   const c=cmCss?cmCss.getValue():($('#cssCode')?.value||'');
   const j=cmJs?cmJs.getValue():($('#jsCode')?.value||'');
   const frame=$('#preview');if(!frame)return;
-  const doc=`${h}<style>${c}</style><script>${j.replace(/<\/script>/gi,'<\\/script>')}<\/script>`;
+  const doc=ensureResponsiveDoc(`${h}<style>${c}</style><script>${j.replace(/<\/script>/gi,'<\\/script>')}<\/script>`);
   frame.srcdoc=doc;
   if(award){
     const snapshot=h+'\u0000'+c+'\u0000'+j;
@@ -1251,20 +1270,56 @@ function runCode(award){
       lastAwardedPlaygroundCode=snapshot;
     }
   }
-  const statusEl=$('#runStatus');if(statusEl){statusEl.classList.add('running');statusEl.innerHTML='<i></i> Running…';setTimeout(()=>{statusEl.classList.remove('running');statusEl.innerHTML='<i></i> Up to date'},480)}
+  const statusEl=$('#runStatus');if(statusEl){statusEl.classList.add('running');statusEl.innerHTML='<i></i> Running…';setTimeout(()=>{statusEl.classList.remove('running');statusEl.innerHTML='<i></i> Updated'},480)}
 }
 $('#runCode')?.addEventListener('click',()=>runCode(true));runCode(false);
 $('#openPreview')?.addEventListener('click',()=>{const src=$('#preview')?.srcdoc;if(!src)return;const w=window.open('about:blank','_blank');if(w){w.document.open();w.document.write(src);w.document.close()}});
 
 const previewStage=$('#previewStage'),previewMeta=$('#previewMeta');
-const deviceMeta={desktop:'Sandboxed iframe',tablet:'Tablet · 760px wide',mobile:'Mobile · 390px wide'};
+const deviceMeta={desktop:'Desktop · full width',tablet:'Tablet · 820 × 1180',mobile:'Mobile · 390 × 844'};
+const deviceFrameDims={tablet:{w:820,h:1180},mobile:{w:390,h:844}};
+function fitDeviceFrame(){
+  const frame=$('#preview'),shell=$('#deviceFrame'),bar=$('#deviceFrameBar');
+  if(!frame||!shell||!previewStage)return;
+  const device=previewStage.getAttribute('data-device')||'desktop';
+  const dims=deviceFrameDims[device];
+  const barH=bar?bar.offsetHeight:0;
+  if(!dims){
+    shell.style.width='100%';shell.style.height='100%';
+    frame.style.width='100%';frame.style.height='100%';frame.style.transform='';
+    return;
+  }
+  const cs=getComputedStyle(previewStage);
+  const padX=parseFloat(cs.paddingLeft||0)+parseFloat(cs.paddingRight||0);
+  const padY=parseFloat(cs.paddingTop||0)+parseFloat(cs.paddingBottom||0);
+  const availW=Math.max(0,previewStage.clientWidth-padX);
+  const availH=Math.max(0,previewStage.clientHeight-padY-barH);
+  const scale=Math.min(1,availW/dims.w,availH/dims.h)||1;
+  // The wrapper is sized to the actual on-screen (scaled) footprint, so the
+  // grid centers a box that matches what's really visible — the oversized
+  // iframe lives inside it as an absolutely-positioned, scaled layer that
+  // does not affect the wrapper's own layout size.
+  const scs=getComputedStyle(shell);
+  const bx=parseFloat(scs.borderLeftWidth||0)+parseFloat(scs.borderRightWidth||0);
+  const by=parseFloat(scs.borderTopWidth||0)+parseFloat(scs.borderBottomWidth||0);
+  shell.style.width=Math.round(dims.w*scale+bx)+'px';
+  shell.style.height=Math.round(dims.h*scale+barH+by)+'px';
+  frame.style.width=dims.w+'px';
+  frame.style.height=dims.h+'px';
+  frame.style.transformOrigin='top left';
+  frame.style.transform='scale('+scale+')';
+}
 $$('.device-btn').forEach(btn=>btn.addEventListener('click',()=>{
   $$('.device-btn').forEach(b=>{b.classList.remove('active');b.setAttribute('aria-pressed','false')});
   btn.classList.add('active');btn.setAttribute('aria-pressed','true');
   const device=btn.dataset.device||'desktop';
   previewStage?.setAttribute('data-device',device);
   if(previewMeta)previewMeta.textContent=deviceMeta[device]||deviceMeta.desktop;
+  fitDeviceFrame();
 }));
+let deviceFrameResizeTimer;
+window.addEventListener('resize',()=>{clearTimeout(deviceFrameResizeTimer);deviceFrameResizeTimer=setTimeout(fitDeviceFrame,150)});
+fitDeviceFrame();
 
 $('#resetCode')?.addEventListener('click',()=>{
   if(!confirm('Reset all three editors back to the starting example? Your current changes will be lost.'))return;
@@ -1313,8 +1368,19 @@ $('#wrapToggle')?.addEventListener('click',e=>{
   [cmHtml,cmCss,cmJs].forEach(cm=>cm&&cm.setOption('lineWrapping',wrapEnabled));
   toast(wrapEnabled?'Line wrap on':'Line wrap off');
 });
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#globalSearch')?.focus()}});
-$('#quickCommand')?.addEventListener('click',()=>$('#globalSearch')?.focus());
+/* "Command Palette" isn't a separate popup — it's a shortcut that jumps
+   focus straight into the top search bar (search projects/snippets/notes,
+   or the saved-library search on those pages). On narrow screens the top
+   search bar is hidden in favor of the mobile search icon/panel, so jump
+   there instead when that's the case, or Ctrl+K / clicking the button
+   would silently do nothing. */
+function openCommandPalette(){
+  const desktopSearch=$('#globalSearch');
+  if(desktopSearch && desktopSearch.offsetParent!==null){desktopSearch.focus();return}
+  $('#mobileSearchToggle')?.click();
+}
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}});
+$('#quickCommand')?.addEventListener('click',openCommandPalette);
 $('#globalSearch')?.addEventListener('input',e=>{const q=e.target.value.toLowerCase().trim();if(location.search.includes('page=saved-snippets')){const local=$('#savedSnippetsSearch');if(local){local.value=q;renderSavedSnippets();return}}if(location.search.includes('page=saved-components')){const local=$('#savedComponentsSearch');if(local){local.value=q;renderSavedComponents();return}}document.querySelectorAll('.project-card,.snippet-card,.note-card,.quick-card').forEach(x=>x.style.display=!q||x.textContent.toLowerCase().includes(q)?'':'none')});
 
 /* components.js runs in its own scope and needs these to save components
