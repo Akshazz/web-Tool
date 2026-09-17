@@ -3,11 +3,11 @@
  * Community account endpoint — register / login / logout.
  * Accounts are stored in MySQL (see sql/a-devtools-schema.sql and config.php).
  */
-require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/core/security.php';
 adevtools_start_session();
 adevtools_security_headers();
 header('Content-Type: application/json');
-require_once __DIR__ . '/auth-helpers.php';
+require_once __DIR__ . '/core/auth-helpers.php';
 
 function respond($ok, $extra = array()) {
     echo json_encode(array_merge(array('ok' => $ok), $extra));
@@ -80,6 +80,59 @@ try {
         unset($_SESSION['userId']);
         session_destroy();
         respond(true);
+    }
+
+    // Edit Profile (account dropdown) — updates name/email, and optionally
+    // the password when both currentPassword and newPassword are supplied.
+    if ($action === 'update-profile') {
+        $me = currentUser();
+        if (!$me) {
+            respond(false, array('error' => 'You need to be logged in.'));
+        }
+        $raw = findUserById($me['id']);
+        if (!$raw) {
+            respond(false, array('error' => 'Account not found.'));
+        }
+
+        $name = trim((string)(isset($body['name']) ? $body['name'] : ''));
+        $email = trim((string)(isset($body['email']) ? $body['email'] : ''));
+        $currentPassword = (string)(isset($body['currentPassword']) ? $body['currentPassword'] : '');
+        $newPassword = (string)(isset($body['newPassword']) ? $body['newPassword'] : '');
+
+        if ($name === '' || $email === '') {
+            respond(false, array('error' => 'Name and email cannot be empty.'));
+        }
+        if (mb_strlen($name) > 80) {
+            respond(false, array('error' => 'Name is too long.'));
+        }
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            respond(false, array('error' => 'That email address doesn\'t look right.'));
+        }
+        if (strcasecmp($email, $raw['email']) !== 0) {
+            $existing = findUserByEmail($email);
+            if ($existing && $existing['id'] !== $raw['id']) {
+                respond(false, array('error' => 'Another account already uses that email.'));
+            }
+        }
+
+        $passwordHash = $raw['password_hash'];
+        if ($newPassword !== '') {
+            if (empty($raw['password_hash'])) {
+                respond(false, array('error' => 'This account signs in via OAuth and has no password to change.'));
+            }
+            if (!password_verify($currentPassword, $raw['password_hash'])) {
+                respond(false, array('error' => 'Current password is incorrect.'));
+            }
+            if (strlen($newPassword) < 6) {
+                respond(false, array('error' => 'New password needs to be at least 6 characters.'));
+            }
+            $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
+        }
+
+        $stmt = getDb()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ? WHERE id = ?');
+        $stmt->execute(array($name, $email, $passwordHash, $raw['id']));
+
+        respond(true, array('user' => publicUser(findUserById($raw['id']))));
     }
 
 } catch (PDOException $e) {

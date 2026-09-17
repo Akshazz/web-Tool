@@ -104,19 +104,39 @@ By default, accounts and workspace data are stored in MySQL (this requires the s
 1. Start **Apache** and **MySQL** from the XAMPP Control Panel.
 2. Import the schema: open **phpMyAdmin → Import**, choose `sql/a-devtools-schema.sql`, and click **Go**. (Or from a terminal: `mysql -u root -p < sql/a-devtools-schema.sql`.) This creates the `a_devtools` database with `users`, `projects`, `notes` and `snippets` tables.
 3. Open `config.php` and check the connection details match your MySQL setup. The defaults (`root`, no password, `127.0.0.1:3306`) match a fresh XAMPP install, so most people won't need to change anything.
+4. Import the rank/XP migration too: `mysql -u root -p a_devtools < database/points-migration.sql` (or phpMyAdmin → Import, same as step 2). This adds the `points` table. It's harmless to run even if it's already there.
 
 **What's stored where:**
 
 - **Accounts** (`users` table) — created the moment someone signs up.
 - **Projects / snippets / notes** — still kept in the browser's `localStorage` for instant, offline use, and mirrored into MySQL (scoped to your account) on every create/edit/delete, via `save-data.php`.
+- **Rank / XP / daily-bonus streak** (`points` table, added by `database/points-migration.sql` — run this once, same as the admin-role migration below) — every XP award mirrors into this table, and the once-a-day bonus claim is decided by the server against this row rather than by the browser's `localStorage`. That's what makes your rank follow your account to a new browser or device instead of resetting, and stops the daily bonus from being re-claimed by clearing local storage.
 - **Downloadable backups** (Settings → Local disk backup) are unchanged — still plain `.json` snapshot files in `data/backups/`, so you can move a copy to another computer or restore an older point in time regardless of where the live data lives.
 
 **Migrating old data:** if you used A-DevTools before accounts existed, `data/projects.json`, `data/notes.json` and `data/snippets.json` may still hold real work that isn't tied to any account yet. After signing up, assign that old data to your new account from a terminal:
 
 ```
-php migrate.php you@example.com
+php cli/migrate.php you@example.com
 ```
 
 This copies those three files into MySQL under that account. It's safe to run more than once (existing rows are updated, not duplicated) and it never deletes the original `.json` files.
 
 **Falling back to JSON files:** if you don't want to set up MySQL, revert `auth.php`, `auth-helpers.php` and `save-data.php` to file-based storage (accounts in `data/users.json`, workspace data in `data/*.json`, same approach as the original local-only version of this app) — ask whoever built this fork for that version, or keep a copy of it before migrating.
+
+## 11. Admin Control
+
+A-DevTools has a project-wide admin panel, opened from the **shield icon in the landing page footer** (bottom-right, next to the copyright line). It's only reachable there, while logged out — a logged-in visitor is sent straight to the dashboard and never sees it.
+
+- **Granting access** — admin access is a `role` column on the `users` table (`user` or `admin`), and nothing in the UI can set it — that's intentional. Grant it yourself from a terminal or phpMyAdmin:
+  ```sql
+  UPDATE users SET role = 'admin' WHERE email = 'you@example.com';
+  ```
+  If you're upgrading an existing install, first run the migration so the column exists:
+  ```
+  mysql -u root -p a_devtools < database/admin-migration.sql
+  ```
+  A brand-new install already has the column from `database/a-devtools-schema.sql`.
+- **Unlocking it** — clicking the shield asks for an admin-role account's **email and password**, checked independently of the regular Community login above it on the same page. It's not a separate credential to invent or remember — it's the same login password, re-verified — and it only proceeds if that account's role is `admin`. This step is throttled the same way as the login form, so it can't be brute-forced, and a wrong password looks identical to a correct password on a non-admin account, so the form can't be used to find out who has admin access.
+- **What it shows** — total users/projects/snippets/notes, a table of every account with its role, and any currently locked-out logins (from repeated failed sign-in attempts).
+- **What you can do** — promote or demote another account's role, delete an account (this also removes that account's projects, snippets and notes), and clear a login lockout early. You can't remove your own admin role or delete your own account from the panel.
+- Click **Lock** in the panel, or just navigate away, to end the unlocked session — you'll need to re-enter your password again next time.

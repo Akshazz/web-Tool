@@ -7,8 +7,9 @@
  * Those files predate the "Community" accounts feature, so they don't
  * belong to anyone yet — you choose which account should own them.
  *
- * Run from the command line, from this folder:
- *   php migrate.php you@example.com
+ * Run from the command line, from the app root folder (one level up
+ *   from this file, alongside index.php):
+ *   php cli/migrate.php you@example.com
  *
  * (Create that account first by signing up in the app, then run this.)
  * Safe to run more than once — existing rows are updated, not duplicated.
@@ -16,15 +17,15 @@
 
 if (php_sapi_name() !== 'cli') {
     http_response_code(403);
-    exit("This script is meant to be run from the command line:\n  php migrate.php you@example.com\n");
+    exit("This script is meant to be run from the command line:\n  php cli/migrate.php you@example.com\n");
 }
 
-require_once __DIR__ . '/db.php';
-require_once __DIR__ . '/auth-helpers.php';
+require_once __DIR__ . '/../core/db.php';
+require_once __DIR__ . '/../core/auth-helpers.php';
 
 $email = isset($argv[1]) ? trim($argv[1]) : '';
 if ($email === '') {
-    fwrite(STDERR, "Usage: php migrate.php you@example.com\n");
+    fwrite(STDERR, "Usage: php cli/migrate.php you@example.com\n");
     fwrite(STDERR, "(Sign up in the app first so that account exists.)\n");
     exit(1);
 }
@@ -49,7 +50,7 @@ function loadJson($file) {
     return is_array($items) ? $items : array();
 }
 
-$dataDir = __DIR__ . '/data';
+$dataDir = dirname(__DIR__) . '/data';
 $plan = array(
     'projects' => array(
         'file' => $dataDir . '/projects.json',

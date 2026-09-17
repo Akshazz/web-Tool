@@ -15,12 +15,12 @@
  * redirect/callback URI. Client IDs/secrets and the site's base URL live
  * in config.php under the 'oauth' key — see the comments there.
  */
-require_once __DIR__ . '/security.php';
+require_once __DIR__ . '/core/security.php';
 adevtools_start_session();
 adevtools_security_headers();
-require_once __DIR__ . '/auth-helpers.php';
+require_once __DIR__ . '/core/auth-helpers.php';
 
-$config = require __DIR__ . '/config.php';
+$config = require __DIR__ . '/core/config.php';
 $oauthConfig = isset($config['oauth']) ? $config['oauth'] : array();
 $baseUrl = isset($oauthConfig['base_url']) ? rtrim($oauthConfig['base_url'], '/') : '';
 

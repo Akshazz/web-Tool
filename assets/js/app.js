@@ -1,12 +1,23 @@
 (function(){
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
-const store={get(k,d=[]){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){localStorage.setItem(k,JSON.stringify(v))}};
+/* --- Per-user storage scoping -------------------------------------------
+   A-DevTools supports multiple community accounts, and several people can
+   use the same browser/computer. Everything gamified or personal (XP,
+   rank, activity feed, getting-started progress, exam results, projects,
+   snippets, notes, run counts...) must never leak from one account to the
+   next. index.php prints window.CURRENT_USER_ID for the signed-in
+   account; every localStorage key that holds per-user data is namespaced
+   under it, so logging in as someone else starts from that person's own,
+   separate XP and activity — never a shared or previous user's. */
+const CURRENT_USER_ID=(typeof window!=='undefined'&&window.CURRENT_USER_ID)?String(window.CURRENT_USER_ID):'guest';
+function userScopedKey(k){return 'u:'+CURRENT_USER_ID+':'+k}
+const store={get(k,d=[]){try{const v=localStorage.getItem(userScopedKey(k));return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){localStorage.setItem(userScopedKey(k),JSON.stringify(v))}};
 const escapeHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const escapeAttr=escapeHtml;
 function toast(message){const el=$('#toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove('show'),1800)}
 function activity(text){const a=store.get('activity');a.unshift({text,time:new Date().toLocaleString()});store.set('activity',a.slice(0,10));renderActivity()}
-function renderActivity(){const el=$('#activityList');if(!el)return;const a=store.get('activity');el.innerHTML=a.length?a.map(x=>`<div class="activity"><b><i class="bx bx-history"></i></b><div>${escapeHtml(x.text)}<div class="muted">${escapeHtml(x.time)}</div></div></div>`).join(''):'<div class="empty">No activity yet.</div>'}
+function renderActivity(){const el=$('#activityList');if(!el)return;const a=store.get('activity').slice(0,5);el.innerHTML=a.length?a.map(x=>`<div class="activity"><b><i class="bx bx-history"></i></b><div>${escapeHtml(x.text)}<div class="muted">${escapeHtml(x.time)}</div></div></div>`).join(''):'<div class="empty">No activity yet.</div>'}
 /* --- Local disk mirror ---------------------------------------------------
    Projects, snippets and notes live in localStorage for instant offline
    use, but every create/update/delete is also sent to save-data.php, which
@@ -95,7 +106,7 @@ function updateDashboardSaveStatus(res){
   if(confirmed||hasData||res.isCustom){
     if(!confirmed)localStorage.setItem('localSaveConfirmed','true');
     if(banner)banner.hidden=true;
-    if(card){card.hidden=false;const t=$('#saveStatusText');if(t)t.textContent='Saving projects, snippets and notes automatically to '+res.path+'.'}
+    if(card){card.hidden=false;const t=$('#saveStatusText');if(t)t.textContent='Saving projects, snippets, components and notes automatically to '+res.path+'.'}
   }else{
     if(card)card.hidden=true;
     if(banner)banner.hidden=false;
@@ -111,7 +122,7 @@ function refreshDiskStatus(){
     }
     const c=res.counts||{};
     const last=res.lastBackup?new Date(res.lastBackup.savedAt).toLocaleString():'No full backup yet';
-    if(el)el.innerHTML=`<p class="muted"><span class="status-ok"><i class="bx bx-check-circle"></i> Connected.</span> Files are written to <code>${escapeHtml(res.path)}</code> on this computer${res.isCustom?' <span class="tag">custom location</span>':''}.</p><div class="disk-counts"><span><b>${c.projects||0}</b> projects</span><span><b>${c.snippets||0}</b> snippets</span><span><b>${c.notes||0}</b> notes</span></div><p class="muted">Last full backup: ${escapeHtml(last)}</p>`;
+    if(el)el.innerHTML=`<p class="muted"><span class="status-ok"><i class="bx bx-check-circle"></i> Connected.</span> Files are written to <code>${escapeHtml(res.path)}</code> on this computer${res.isCustom?' <span class="tag">custom location</span>':''}.</p><div class="disk-counts"><span><b>${c.projects||0}</b> projects</span><span><b>${c.snippets||0}</b> snippets</span><span><b>${c.components||0}</b> components</span><span><b>${c.notes||0}</b> notes</span></div><p class="muted">Last full backup: ${escapeHtml(last)}</p>`;
     const locInput=$('#dataLocationInput');
     if(locInput && document.activeElement!==locInput){locInput.value=res.isCustom?res.path:'';locInput.placeholder=res.default||res.path}
     updateDashboardSaveStatus(res);
@@ -137,6 +148,18 @@ $('#downloadBackupBtn')?.addEventListener('click',downloadBackupFile);
 $('#importBackupInput')?.addEventListener('change',e=>{importBackupFile(e.target.files[0]);e.target.value=''});
 $('#importBackupBtn')?.addEventListener('click',()=>$('#importBackupInput')?.click());
 $('#saveLocationBtn')?.addEventListener('click',saveDataLocation);
+$$('#viewBackupFolderBtn').forEach(btn=>btn.addEventListener('click',()=>{
+  if(!CSRF_TOKEN){toast('Log in to open the backup folder');return}
+  btn.disabled=true;
+  fetch(DISK_ENDPOINT+'?action=open-folder',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:CSRF_TOKEN})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res&&res.ok){toast('Opened '+res.path+' on this computer')}
+      else{toast((res&&res.error)||'Could not open the backup folder')}
+    })
+    .catch(()=>toast('Could not reach the local save endpoint'))
+    .finally(()=>{btn.disabled=false});
+}));
 $('#resetLocationBtn')?.addEventListener('click',()=>{const input=$('#dataLocationInput');if(input)input.value='';saveDataLocation()});
 $('#saveSetupConfirm')?.addEventListener('click',()=>{localStorage.setItem('localSaveConfirmed','true');toast('Local saving confirmed — your work will keep saving automatically');refreshDiskStatus()});
 refreshDiskStatus();
@@ -162,13 +185,27 @@ $('#sidebarToggle')?.addEventListener('click',()=>{
   setDesktopCollapsed(!sidebar?.classList.contains('collapsed'));
 });
 setDesktopCollapsed(localStorage.getItem('sidebarCollapsed')==='true');
-function setTheme(dark){document.body.classList.toggle('dark',!!dark);localStorage.setItem('theme',dark?'dark':'light');const c=$('#darkSetting');if(c)c.checked=!!dark;const ti=$('#themeToggle')?.querySelector('.bx');if(ti)ti.className='bx '+(dark?'bx-sun':'bx-moon')}
+/* Name of the CodeMirror theme that matches the app's current light/dark
+   mode - 'material-darker' in dark mode, the light 'neat' theme otherwise.
+   Used both when an editor first mounts and whenever the theme toggle
+   flips, so the Playground and every read-only code preview always match
+   the rest of the UI instead of always looking like a dark IDE. */
+function cmThemeName(){return document.body.classList.contains('dark')?'material-darker':'neat'}
+/* Pushes the current cmThemeName() onto every live CodeMirror instance:
+   the three Playground editors plus any already-mounted read-only
+   preview panels (Snippets/UI Components "View code" modals). */
+function applyCodeMirrorTheme(){
+  const name=cmThemeName();
+  [cmHtml,cmCss,cmJs].forEach(cm=>{if(cm){cm.setOption('theme',name);cm.refresh()}});
+  $$('.code-mini-editor').forEach(el=>{if(el._cm){el._cm.setOption('theme',name);el._cm.refresh()}});
+}
+function setTheme(dark){document.body.classList.toggle('dark',!!dark);localStorage.setItem('theme',dark?'dark':'light');const c=$('#darkSetting');if(c)c.checked=!!dark;const ti=$('#themeToggle')?.querySelector('.bx');if(ti)ti.className='bx '+(dark?'bx-sun':'bx-moon');const tl=$('#themeToggleLabel');if(tl)tl.textContent=dark?'Light mode':'Dark mode';applyCodeMirrorTheme()}
 $('#themeToggle')?.addEventListener('click',()=>setTheme(!document.body.classList.contains('dark')));
 setTheme(localStorage.getItem('theme')==='dark');
 $('#darkSetting')?.addEventListener('change',e=>setTheme(e.target.checked));
 $('#notificationBtn')?.addEventListener('click',()=>{location.href='?page=dashboard';toast('Activity is available on the Dashboard')});
 const modal=$('#modal'),modalBody=$('#modalBody');
-function openModal(html,title){if(!modal)return;modalBody.innerHTML=html;modal.classList.add('show');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');setTimeout(()=>{const first=modal.querySelector('input,textarea,select,button:not(.modal-close)');first?.focus()},30)}
+function openModal(html,extraClass){if(!modal)return;modalBody.innerHTML=html;const box=modal.querySelector('.modal');if(box){box.classList.remove('modal-compact');if(extraClass)box.classList.add(extraClass)}modal.classList.add('show');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');modalBody.querySelectorAll('.code-mini-editor.active').forEach(mountCodeEditor);setTimeout(()=>{const first=modal.querySelector('input,textarea,select,button:not(.modal-close)');first?.focus()},30)}
 function closeModal(){if(!modal)return;modal.classList.remove('show');modal.setAttribute('aria-hidden','true');document.body.classList.remove('modal-open')}
 /* Exposed globally: the first-run experience picker and tour live in a separate
    script block later in the file and call these by name. */
@@ -178,7 +215,7 @@ $('#modalClose')?.addEventListener('click',closeModal);modal?.addEventListener('
 function projectForm(editId){
   const p=store.get('projects'),item=editId?p.find(x=>String(x.id)===String(editId)):null;
   openModal(`<h2 id="modalTitle">${item?'Edit':'New'} Project</h2><p class="modal-subtitle">${item?'Update this local project reference.':'Create a local project reference for your workspace.'}</p><div class="form-grid"><label>Project name<input id="mName" class="input" value="${escapeAttr(item?.name||'')}" placeholder="e.g. Client Portal"></label><label>Technology<input id="mTech" class="input" value="${escapeAttr(item?.tech||'')}" placeholder="PHP, JavaScript, MySQL"></label><label class="full">Description<textarea id="mDesc" class="input" rows="5" placeholder="What are you building?">${escapeHtml(item?.desc||'')}</textarea></label></div><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProject"><i class="bx bx-save"></i> ${item?'Update':'Save'} Project</button></div>`);
-  $('#saveProject').onclick=()=>{const name=$('#mName').value.trim()||'Untitled Project',tech=$('#mTech').value.trim()||'Web',desc=$('#mDesc').value.trim();if(item){item.name=name;item.tech=tech;item.desc=desc;item.updatedAt=Date.now();store.set('projects',p);diskSaveItem('projects',item);activity('Updated project: '+name)}else{const newProject={id:Date.now(),name,tech,desc};p.unshift(newProject);store.set('projects',p);diskSaveItem('projects',newProject);activity('Created project: '+name);markGs('createdProject')}closeModal();renderProjects();updateCounts();toast(item?'Project updated on your local drive':'Project saved to your local drive')};
+  $('#saveProject').onclick=()=>{const name=$('#mName').value.trim()||'Untitled Project',tech=$('#mTech').value.trim()||'Web',desc=$('#mDesc').value.trim();if(item){item.name=name;item.tech=tech;item.desc=desc;item.updatedAt=Date.now();store.set('projects',p);diskSaveItem('projects',item);awardPoints(5,'Updated project: '+name)}else{const newProject={id:Date.now(),name,tech,desc};p.unshift(newProject);store.set('projects',p);diskSaveItem('projects',newProject);awardPoints(15,'Created project: '+name);markGs('createdProject')}closeModal();renderProjects();updateCounts();toast(item?'Project updated on your local drive':'Project saved to your local drive')};
 }
 ['newProject','newProjectHero','newProjectPage'].forEach(id=>$('#'+id)?.addEventListener('click',()=>projectForm()));
 function renderProjects(){const el=$('#projectGrid');if(!el)return;const p=store.get('projects');el.innerHTML=p.length?p.map(x=>`<article class="project-card"><div class="card-title">${escapeHtml(x.name)}</div><div class="card-meta">${escapeHtml(x.tech)}</div><p>${escapeHtml(x.desc||'No description.')}</p><div class="card-actions"><button class="small-btn" data-edit-project="${escapeAttr(x.id)}"><i class="bx bx-edit"></i> Edit</button><button class="small-btn" data-delete-project="${escapeAttr(x.id)}"><i class="bx bx-trash"></i> Delete</button></div></article>`).join(''):'<div class="empty">No projects yet. Create your first project.</div>'}
@@ -232,7 +269,61 @@ function savePlaygroundPayload(payload,title){
   sessionStorage.setItem('adevtoolsPlaygroundTitle',title||'Snippet');
   location.href='?page=code';
 }
-function runStarter(key){const t=starterTemplates[key];if(t)savePlaygroundPayload({code:t.code,lang:t.lang},t.title)}
+function runStarter(key){const t=starterTemplates[key];if(!t)return;bumpStarterRun(key);savePlaygroundPayload({code:t.code,lang:t.lang},t.title)}
+/* --- Popularity ranking ---------------------------------------------------
+   Every time a starter template or a saved snippet is run in the Playground,
+   we count it. That count powers three things: a "Most popular" sort on the
+   Starter Library, a "Most run" sort on saved Snippets, and a small
+   leaderboard panel on the Code Playground page itself — all purely local,
+   no account or server-side data involved. */
+function bumpStarterRun(key){
+  const counts=store.get('starterRunCounts',{});
+  counts[key]=(counts[key]||0)+1;
+  store.set('starterRunCounts',counts);
+  renderStarterRanking();
+  renderPlaygroundLeaderboard();
+  awardPoints(3,'Ran starter: '+(starterTemplates[key]?.title||key));
+}
+function bumpSnippetRun(id){
+  const list=store.get('snippets'),x=list.find(i=>String(i.id)===String(id));
+  if(!x)return;
+  x.runCount=(x.runCount||0)+1;
+  store.set('snippets',list);
+  diskSaveItem('snippets',x);
+  renderSnippets();
+  renderPlaygroundLeaderboard();
+  awardPoints(3,'Ran snippet: '+x.title);
+}
+function computeLeaderboard(){
+  const starterCounts=store.get('starterRunCounts',{});
+  const starterItems=Object.keys(starterTemplates).map(key=>({title:starterTemplates[key].title,type:'Starter',runs:starterCounts[key]||0}));
+  const snippetItems=store.get('snippets').map(s=>({title:s.title,type:'Snippet',runs:s.runCount||0}));
+  return starterItems.concat(snippetItems).filter(x=>x.runs>0).sort((a,b)=>b.runs-a.runs).slice(0,5);
+}
+function renderPlaygroundLeaderboard(){
+  const el=$('#leaderboardList');if(!el)return;
+  const top=computeLeaderboard();
+  el.innerHTML=top.length?top.map((x,i)=>`<div class="leaderboard-row"><span class="rank-num rank-${i+1}">#${i+1}</span><span class="lb-title">${escapeHtml(x.title)}</span><span class="tag">${escapeHtml(x.type)}</span><span class="lb-runs">${x.runs} run${x.runs===1?'':'s'}</span></div>`).join(''):'<div class="empty">Run a starter or a snippet to see rankings here.</div>';
+}
+function renderStarterRanking(){
+  const grid=$('.starter-grid');if(!grid)return;
+  const sort=$('#starterSort')?.value||'featured';
+  const counts=store.get('starterRunCounts',{});
+  const cards=Array.from(grid.querySelectorAll('.starter-card'));
+  cards.forEach(card=>{card.dataset.key=card.querySelector('[data-template]')?.getAttribute('data-template')||''});
+  const originalOrder=cards.slice();
+  const byPopularity=cards.slice().sort((a,b)=>(counts[b.dataset.key]||0)-(counts[a.dataset.key]||0));
+  const ordered=sort==='popular'?byPopularity:originalOrder;
+  ordered.forEach(card=>grid.appendChild(card));
+  cards.forEach(card=>{
+    const badge=card.querySelector('[data-rank-badge]');if(!badge)return;
+    const runs=counts[card.dataset.key]||0;
+    const rank=byPopularity.indexOf(card)+1;
+    if(sort==='popular'&&runs>0&&rank<=3){badge.hidden=false;badge.textContent='#'+rank+' Most Popular';badge.className='rank-badge rank-'+rank}
+    else{badge.hidden=true}
+  });
+}
+$('#starterSort')?.addEventListener('change',renderStarterRanking);
 /* Starter snippet library.
    Seeded by id, not by "is the list empty", so people who already had the
    first three samples still receive the ones added later. A sample is only
@@ -480,38 +571,75 @@ body.dark{
    explicitly click Save on. This runs once to strip out any sample-* items
    an earlier version already added, then never runs again. */
 function ensureSampleSnippets(){
-  if(localStorage.getItem('samplesRemoved')==='true')return;
+  if(localStorage.getItem(userScopedKey('samplesRemoved'))==='true')return;
   const list=store.get('snippets');
   const kept=list.filter(x=>!String(x.id).startsWith('sample-'));
   if(kept.length!==list.length){
     store.set('snippets',kept);
     list.filter(x=>String(x.id).startsWith('sample-')).forEach(x=>diskDeleteItem('snippets',x.id));
   }
-  localStorage.setItem('samplesRemoved','true');
+  localStorage.setItem(userScopedKey('samplesRemoved'),'true');
 }
 function snippetForm(editId){
   const list=store.get('snippets'),item=editId?list.find(x=>String(x.id)===String(editId)):null;
   openModal(`<h2>${item?'Edit':'Add'} Snippet</h2><p class="modal-subtitle">Save reusable code and run it directly from your library.</p><div class="form-grid"><label>Title<input id="sTitle" class="input" value="${escapeAttr(item?.title||'')}" placeholder="Responsive card"></label><label>Language<select id="sLang" class="input"><option>HTML + CSS</option><option>HTML + JS</option><option>HTML + CSS + JS</option><option>CSS</option><option>JavaScript</option></select></label><label class="full">Code<textarea id="sCode" class="modal-code" rows="15" placeholder="Paste runnable code here">${escapeHtml(item?.code||'')}</textarea></label></div><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveSnippet"><i class="bx bx-save"></i> ${item?'Update':'Save'} Snippet</button></div>`);
   if(item)$('#sLang').value=item.lang;
-  $('#saveSnippet').onclick=()=>{const title=$('#sTitle').value.trim()||'Untitled Snippet',lang=$('#sLang').value,code=$('#sCode').value;if(!code.trim()){toast('Add some code first');$('#sCode').focus();return}if(item){item.title=title;item.lang=lang;item.code=code;item.updatedAt=Date.now();store.set('snippets',list);diskSaveItem('snippets',item);activity('Updated snippet: '+title)}else{const newSnippet={id:Date.now(),title,lang,code,createdAt:Date.now()};list.unshift(newSnippet);store.set('snippets',list);diskSaveItem('snippets',newSnippet);activity('Saved snippet: '+title);markGs('savedSnippet')}closeModal();renderSnippets();updateCounts();toast(item?'Snippet updated':'Snippet saved to your local drive')};
+  $('#saveSnippet').onclick=()=>{const title=$('#sTitle').value.trim()||'Untitled Snippet',lang=$('#sLang').value,code=$('#sCode').value;if(!code.trim()){toast('Add some code first');$('#sCode').focus();return}if(item){item.title=title;item.lang=lang;item.code=code;item.updatedAt=Date.now();store.set('snippets',list);diskSaveItem('snippets',item);awardPoints(3,'Updated snippet: '+title)}else{const newSnippet={id:Date.now(),title,lang,code,source:'snippet',createdAt:Date.now()};list.unshift(newSnippet);store.set('snippets',list);diskSaveItem('snippets',newSnippet);awardPoints(10,'Saved snippet: '+title);markGs('savedSnippet')}closeModal();renderSnippets();updateCounts();toast(item?'Snippet updated':'Snippet saved to your local drive')};
 }
 $('#addSnippet')?.addEventListener('click',()=>snippetForm());
 
-function copySnippet(id){const x=store.get('snippets').find(i=>String(i.id)===String(id));if(!x)return;const done=()=>{activity('Copied snippet: '+x.title);toast('Snippet copied')};if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(x.code).then(done).catch(()=>fallbackCopy(x.code,done));else fallbackCopy(x.code,done)}
+function copySnippet(id){const x=store.get('snippets').find(i=>String(i.id)===String(id));if(!x)return;const done=()=>{awardPoints(2,'Copied snippet: '+x.title);toast('Snippet copied')};if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(x.code).then(done).catch(()=>fallbackCopy(x.code,done));else fallbackCopy(x.code,done)}
 function fallbackCopy(text,done){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done()}finally{ta.remove()}}
 function deleteSnippet(id){const list=store.get('snippets'),x=list.find(i=>String(i.id)===String(id));if(!x)return;if(!confirm('Delete this snippet?'))return;store.set('snippets',list.filter(i=>String(i.id)!==String(id)));diskDeleteItem('snippets',id);activity('Deleted snippet: '+x.title);renderSnippets();updateCounts();toast('Snippet deleted')}
 function previewSnippet(id){const x=store.get('snippets').find(i=>String(i.id)===String(id));if(!x)return;markGs('viewedSnippet');openModal(`<div class="modal-preview-head"><div><span class="section-kicker">${escapeHtml(x.lang)}</span><h2>${escapeHtml(x.title)}</h2></div><button class="primary-btn" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run in Playground</button></div>${buildCodePreviewMarkup(x.code)}<div class="modal-footer"><button class="ghost-btn" data-close-modal>Close</button><button class="primary-btn" data-copy-preview="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy code</button></div>`)}
-function renderSnippets(){
-  const el=$('#snippetGrid');if(!el)return;let list=store.get('snippets');
-  const q=($('#snippetSearch')?.value||'').trim().toLowerCase(),filter=$('#snippetFilter')?.value||'all',sort=$('#snippetSort')?.value||'recent';
+/* Saved Snippets and Saved Components each have their own page and grid
+   now (no more shared "Your Library" panel with tabs). Components saved
+   from the UI Components page (components.js) are still written into this
+   same `snippets` store — there's only ever been one list — but tagged
+   source:'component' and their component category (Actions, Forms,
+   Feedback...) at save time. Items saved before this existed have neither
+   field, so both are recovered with a fallback: the 'component-' id prefix
+   that component saves have always used identifies the source, and the
+   snippet's own language stands in for a category on the plain-snippet
+   side (components fall back to 'Other' there, since every saved component
+   recorded the same generic lang). */
+function snippetSource(x){return x.source||(String(x.id).indexOf('component-')===0?'component':'snippet')}
+function snippetCategory(x){return x.category||(snippetSource(x)==='component'?'Other':(x.lang||'Other'))}
+function renderSavedGrid(source,ids,emptyMsg){
+  const el=$('#'+ids.grid);if(!el)return;
+  const list=store.get('snippets').filter(x=>snippetSource(x)===source);
+  const q=($('#'+ids.search)?.value||'').trim().toLowerCase(),filter=$('#'+ids.filter)?.value||'all',sort=$('#'+ids.sort)?.value||'recent';
+  const pageCount=$('#'+ids.pageCount);if(pageCount)pageCount.textContent=list.length;
   let filtered=list.filter(x=>(filter==='all'||x.lang===filter)&&(!q||(x.title+' '+x.lang+' '+x.code).toLowerCase().includes(q)));
-  if(sort==='name')filtered.sort((a,b)=>a.title.localeCompare(b.title));else if(sort==='language')filtered.sort((a,b)=>a.lang.localeCompare(b.lang)||a.title.localeCompare(b.title));else filtered.sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
-  $('#savedSnippetCount').textContent=filtered.length;
-  el.innerHTML=filtered.length?filtered.map(x=>`<article class="snippet-card"><div class="snippet-card-top"><div><span class="tag">${escapeHtml(x.lang)}</span><div class="card-title">${escapeHtml(x.title)}</div></div><span class="snippet-live"><i></i> Runnable</span></div><pre class="code-mini">${escapeHtml(x.code)}</pre><div class="card-actions"><div class="action-left"><button class="small-btn run-snippet" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run</button><button class="small-btn" data-copy-snippet="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy</button><button class="small-btn" data-preview-snippet="${escapeAttr(x.id)}"><i class="bx bx-show"></i> Preview</button></div><div class="action-right"><button class="small-btn" data-edit-snippet="${escapeAttr(x.id)}"><i class="bx bx-edit"></i></button><button class="small-btn" data-delete-snippet="${escapeAttr(x.id)}"><i class="bx bx-trash"></i></button></div></div></article>`).join(''):'<div class="empty">No snippets match the current filter.</div>';
+  if(sort==='name')filtered.sort((a,b)=>a.title.localeCompare(b.title));else if(sort==='language')filtered.sort((a,b)=>a.lang.localeCompare(b.lang)||a.title.localeCompare(b.title));else if(sort==='popular')filtered.sort((a,b)=>(b.runCount||0)-(a.runCount||0)||a.title.localeCompare(b.title));else filtered.sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
+  if(!filtered.length){el.innerHTML='<div class="empty">'+emptyMsg+'</div>';return}
+  const groups=[],groupIndex={};
+  filtered.forEach(x=>{const cat=snippetCategory(x);if(!(cat in groupIndex)){groupIndex[cat]=groups.length;groups.push({cat,items:[]})}groups[groupIndex[cat]].items.push(x)});
+  groups.sort((a,b)=>a.cat.localeCompare(b.cat));
+  el.innerHTML=groups.map(g=>'<div class="snippet-cat-group"><div class="snippet-cat-heading">'+escapeHtml(g.cat)+' <span class="count-pill">'+g.items.length+'</span></div><div class="snippet-grid">'+g.items.map((x,i)=>{const rank=sort==='popular'&&(x.runCount||0)>0&&i<3?i+1:0;return `<article class="snippet-card"><div class="snippet-card-top"><div>${rank?`<span class="rank-badge rank-${rank}">#${rank} Most Run</span>`:''}<span class="tag">${escapeHtml(x.lang)}</span><div class="card-title">${escapeHtml(x.title)}</div></div><span class="snippet-live"><i></i> Runnable</span></div><pre class="code-mini">${escapeHtml(x.code)}</pre><div class="card-actions"><div class="action-left"><button class="small-btn run-snippet" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run</button><button class="small-btn" data-copy-snippet="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy</button><button class="small-btn" data-preview-snippet="${escapeAttr(x.id)}"><i class="bx bx-show"></i> Preview</button></div><div class="action-right"><button class="small-btn" data-edit-snippet="${escapeAttr(x.id)}"><i class="bx bx-edit"></i></button><button class="small-btn" data-delete-snippet="${escapeAttr(x.id)}"><i class="bx bx-trash"></i></button></div></div><div class="muted snippet-runs">${x.runCount||0} run${(x.runCount||0)===1?'':'s'}</div></article>`}).join('')+'</div></div>').join('');
 }
-$('#snippetGrid')?.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.dataset.runSnippet){const x=store.get('snippets').find(i=>String(i.id)===String(b.dataset.runSnippet));if(x)savePlaygroundPayload({code:x.code,lang:x.lang},x.title)}else if(b.dataset.copySnippet)copySnippet(b.dataset.copySnippet);else if(b.dataset.previewSnippet)previewSnippet(b.dataset.previewSnippet);else if(b.dataset.editSnippet)snippetForm(b.dataset.editSnippet);else if(b.dataset.deleteSnippet)deleteSnippet(b.dataset.deleteSnippet)});
-['snippetSearch','snippetFilter','snippetSort'].forEach(id=>$('#'+id)?.addEventListener(id==='snippetSearch'?'input':'change',renderSnippets));
-$$('.view-btn').forEach(btn=>btn.addEventListener('click',()=>{$$('.view-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');$('#snippetGrid')?.classList.toggle('snippet-list',btn.dataset.view==='list');localStorage.setItem('snippetView',btn.dataset.view)}));
+const SAVED_SNIPPETS_IDS={grid:'savedSnippetsGrid',search:'savedSnippetsSearch',filter:'savedSnippetsFilter',sort:'savedSnippetsSort',pageCount:'savedSnippetsPageCount'};
+const SAVED_COMPONENTS_IDS={grid:'savedComponentsGrid',search:'savedComponentsSearch',filter:'savedComponentsFilter',sort:'savedComponentsSort',pageCount:'savedComponentsPageCount'};
+function renderSavedSnippets(){renderSavedGrid('snippet',SAVED_SNIPPETS_IDS,'No snippets match the current filter.')}
+function renderSavedComponents(){renderSavedGrid('component',SAVED_COMPONENTS_IDS,'No saved components yet — save one from the UI Components page.')}
+/* Whichever of the two saved pages (if either) is currently open, this
+   refreshes it. Safe to call from anywhere (add/edit/delete/run a snippet,
+   import a backup, etc.) since renderSavedGrid no-ops when its grid isn't
+   on the current page. */
+function renderSnippets(){renderSavedSnippets();renderSavedComponents()}
+function handleSavedGridClick(e){
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.runSnippet){const x=store.get('snippets').find(i=>String(i.id)===String(b.dataset.runSnippet));if(x){bumpSnippetRun(x.id);savePlaygroundPayload({code:x.code,lang:x.lang},x.title)}}
+  else if(b.dataset.copySnippet)copySnippet(b.dataset.copySnippet);
+  else if(b.dataset.previewSnippet)previewSnippet(b.dataset.previewSnippet);
+  else if(b.dataset.editSnippet)snippetForm(b.dataset.editSnippet);
+  else if(b.dataset.deleteSnippet)deleteSnippet(b.dataset.deleteSnippet);
+}
+$('#savedSnippetsGrid')?.addEventListener('click',handleSavedGridClick);
+$('#savedComponentsGrid')?.addEventListener('click',handleSavedGridClick);
+['savedSnippetsSearch','savedSnippetsFilter','savedSnippetsSort'].forEach(id=>$('#'+id)?.addEventListener(id==='savedSnippetsSearch'?'input':'change',renderSavedSnippets));
+['savedComponentsSearch','savedComponentsFilter','savedComponentsSort'].forEach(id=>$('#'+id)?.addEventListener(id==='savedComponentsSearch'?'input':'change',renderSavedComponents));
+$$('.view-btn').forEach(btn=>btn.addEventListener('click',()=>{$$('.view-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');const grid=$('#savedSnippetsGrid')||$('#savedComponentsGrid');grid?.classList.toggle('snippet-list',btn.dataset.view==='list');localStorage.setItem('snippetView',btn.dataset.view)}));
 if(localStorage.getItem('snippetView')==='list')$('.view-btn[data-view="list"]')?.click();
 $$('.run-template').forEach(btn=>btn.addEventListener('click',()=>runStarter(btn.dataset.template)));
 function saveStarterToLibrary(key){
@@ -519,11 +647,11 @@ function saveStarterToLibrary(key){
   const id='starter-'+key;
   const list=store.get('snippets');
   if(list.some(x=>String(x.id)===id)){toast(t.title+' is already in your snippets');return}
-  const item={id,title:t.title,lang:t.lang,code:t.code,createdAt:Date.now()};
+  const item={id,title:t.title,lang:t.lang,code:t.code,source:'snippet',createdAt:Date.now()};
   list.unshift(item);
   store.set('snippets',list);
   diskSaveItem('snippets',item);
-  activity('Saved starter: '+t.title);
+  awardPoints(8,'Saved starter: '+t.title);
   markGs('savedSnippet');
   renderSnippets();updateCounts();
   toast(t.title+' saved to Snippets');
@@ -532,10 +660,16 @@ $$('.save-template').forEach(btn=>btn.addEventListener('click',()=>saveStarterTo
 $$('.preview-template').forEach(btn=>btn.addEventListener('click',()=>{const t=starterTemplates[btn.dataset.template];if(!t)return;markGs('viewedSnippet');openModal(`<div class="modal-preview-head"><div><span class="section-kicker">${escapeHtml(t.lang)}</span><h2>${escapeHtml(t.title)}</h2></div><button class="primary-btn" data-run-template="${escapeAttr(btn.dataset.template)}"><i class="bx bx-play"></i> Run in Playground</button></div>${buildCodePreviewMarkup(t.code,'preview-code-large')}`)}));
 modal?.addEventListener('click',e=>{
   const close=e.target.closest('[data-close-modal]');if(close)closeModal();
+  const rankupNext=e.target.closest('[data-rankup-next]');
+  if(rankupNext){
+    closeModal();
+    rankUpQueue.shift();
+    if(rankUpQueue.length)setTimeout(advanceRankUpQueue,320);
+  }
   const expConfirm=e.target.closest('[data-exp-confirm]');if(expConfirm && typeof window.__expConfirmHandler==='function')window.__expConfirmHandler();
   const expCancel=e.target.closest('[data-exp-cancel]');if(expCancel && typeof window.__expCancelHandler==='function')window.__expCancelHandler();
   const run=e.target.closest('[data-run-template]');if(run)runStarter(run.dataset.runTemplate);
-  const runSnippetBtn=e.target.closest('[data-run-snippet]');if(runSnippetBtn){const x=store.get('snippets').find(i=>String(i.id)===String(runSnippetBtn.dataset.runSnippet));if(x)savePlaygroundPayload({code:x.code,lang:x.lang},x.title)}
+  const runSnippetBtn=e.target.closest('[data-run-snippet]');if(runSnippetBtn){const x=store.get('snippets').find(i=>String(i.id)===String(runSnippetBtn.dataset.runSnippet));if(x){bumpSnippetRun(x.id);savePlaygroundPayload({code:x.code,lang:x.lang},x.title)}}
   const copyPrev=e.target.closest('[data-copy-preview]');if(copyPrev)copySnippet(copyPrev.dataset.copyPreview);
   const pTab=e.target.closest('[data-preview-tab]');
   if(pTab){
@@ -543,23 +677,381 @@ modal?.addEventListener('click',e=>{
     frame.querySelectorAll('[data-preview-tab]').forEach(b=>b.classList.remove('active'));
     pTab.classList.add('active');
     const key=pTab.dataset.previewTab;
-    frame.querySelectorAll('[data-preview-panel]').forEach(p=>p.classList.toggle('active',p.dataset.previewPanel===key));
+    frame.querySelectorAll('[data-preview-panel]').forEach(p=>{
+      const isActive=p.dataset.previewPanel===key;
+      p.classList.toggle('active',isActive);
+      if(isActive){mountCodeEditor(p);if(p._cm)requestAnimationFrame(()=>p._cm.refresh())}
+    });
   }
 });
 function noteForm(editId){
   const n=store.get('notes'),item=editId?n.find(x=>String(x.id)===String(editId)):null;
   openModal(`<h2>${item?'Edit':'New'} Note</h2><p class="modal-subtitle">${item?'Update this technical reference or decision.':'Capture a short technical reference or development decision.'}</p><label>Title<input id="nTitle" class="input" value="${escapeAttr(item?.title||'')}" placeholder="PHP routing notes"></label><label>Note<textarea id="nText" class="input" rows="8" placeholder="Write your development notes...">${escapeHtml(item?.text||'')}</textarea></label><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveNote"><i class="bx bx-save"></i> ${item?'Update':'Save'} Note</button></div>`);
-  $('#saveNote').onclick=()=>{const title=$('#nTitle').value.trim()||'Untitled Note',text=$('#nText').value.trim();if(item){item.title=title;item.text=text;item.updatedAt=Date.now();store.set('notes',n);diskSaveItem('notes',item);activity('Updated note: '+title)}else{const newNote={id:Date.now(),title,text,createdAt:Date.now()};n.unshift(newNote);store.set('notes',n);diskSaveItem('notes',newNote);activity('Created note: '+title)}closeModal();renderNotes();updateCounts();toast(item?'Note updated on your local drive':'Note saved to your local drive')}
+  $('#saveNote').onclick=()=>{const title=$('#nTitle').value.trim()||'Untitled Note',text=$('#nText').value.trim();if(item){item.title=title;item.text=text;item.updatedAt=Date.now();store.set('notes',n);diskSaveItem('notes',item);awardPoints(2,'Updated note: '+title)}else{const newNote={id:Date.now(),title,text,createdAt:Date.now()};n.unshift(newNote);store.set('notes',n);diskSaveItem('notes',newNote);awardPoints(5,'Created note: '+title)}closeModal();renderNotes();updateCounts();toast(item?'Note updated on your local drive':'Note saved to your local drive')}
 }
 $('#addNote')?.addEventListener('click',()=>noteForm());
 function renderNotes(){const el=$('#noteGrid');if(!el)return;const n=store.get('notes');el.innerHTML=n.length?n.map(x=>`<article class="note-card"><div class="card-title">${escapeHtml(x.title)}</div><p>${escapeHtml(x.text)}</p><div class="card-actions"><button class="small-btn" data-edit-note="${escapeAttr(x.id)}"><i class="bx bx-edit"></i> Edit</button><button class="small-btn" data-delete-note="${escapeAttr(x.id)}"><i class="bx bx-trash"></i> Delete</button></div></article>`).join(''):'<div class="empty">No notes yet.</div>'}
 $('#noteGrid')?.addEventListener('click',e=>{const editBtn=e.target.closest('[data-edit-note]');if(editBtn){noteForm(editBtn.getAttribute('data-edit-note'));return}const b=e.target.closest('[data-delete-note]');if(!b)return;const id=b.dataset.deleteNote;const list=store.get('notes'),x=list.find(i=>String(i.id)===String(id));store.set('notes',list.filter(i=>String(i.id)!==String(id)));diskDeleteItem('notes',id);activity('Deleted note: '+(x?.title||''));renderNotes();updateCounts();toast('Note deleted')});
-function updateCounts(){[['projectCount','projects'],['snippetCount','snippets'],['noteCount','notes']].forEach(([id,key])=>{const el=$('#'+id);if(el)el.textContent=store.get(key).length});const saved=$('#savedSnippetCount');if(saved)saved.textContent=store.get('snippets').length}
+function updateCounts(){const el=$('#projectCount');if(el)el.textContent=store.get('projects').length;const noteEl=$('#noteCount');if(noteEl)noteEl.textContent=store.get('notes').length;const list=store.get('snippets');const snippetOnly=list.filter(x=>snippetSource(x)==='snippet').length,componentOnly=list.filter(x=>snippetSource(x)==='component').length;const snipEl=$('#snippetCount');if(snipEl)snipEl.textContent=snippetOnly;const sideSnip=$('#sidebarSnippetCount'),sideComp=$('#sidebarComponentCount');if(sideSnip)sideSnip.textContent=snippetOnly;if(sideComp)sideComp.textContent=componentOnly}
+/* --- Daily Bonus + Rank ----------------------------------------------------
+   Points are no longer earned passively by every click — that lived in the
+   navbar as a running counter and it wasn't the intent. Instead, once per
+   day the person can claim a Daily Bonus (streaks make it worth a bit more
+   on consecutive days). The accumulated total maps to a Rank, shown next to
+   the profile avatar rather than as a raw point count in the navbar. */
+/* --- XP / Points / Rank game layer -----------------------------------
+   Every meaningful action in the workspace (running code, saving a
+   snippet, starting a project, completing a beginner milestone, passing
+   an exam...) earns XP through awardPoints(). XP accumulates into a
+   Rank via RANKS below, which is the game's "level" ladder. A once-daily
+   login bonus (with a streak multiplier) also feeds the same pool. */
+function todayKey(){return new Date().toISOString().slice(0,10)}
+function yesterdayKey(){return new Date(Date.now()-86400000).toISOString().slice(0,10)}
+/* --- Points now live in the database --------------------------------
+   The `points` table (database/points-migration.sql) is the source of
+   truth for XP/rank/streak, scoped to the account (see save-data.php).
+   index.php reads that row and renders it into window.SERVER_POINTS, so
+   the very first paint already reflects the database rather than an
+   empty/stale localStorage cache — the same pattern already used for
+   window.SERVER_EXPERIENCE_LEVEL. localStorage still holds the working
+   copy for instant UI updates, exactly like it does for projects,
+   snippets and notes; every change is mirrored back to the database
+   through pointsSyncAward()/claimDailyBonus() below. */
+const SERVER_POINTS=(typeof window!=='undefined'&&window.SERVER_POINTS)?window.SERVER_POINTS:null;
+if(SERVER_POINTS){store.set('points',{total:SERVER_POINTS.total||0,lastClaimDate:SERVER_POINTS.lastClaimDate||null,streak:SERVER_POINTS.streak||0})}
+function getPointsState(){
+  return store.get('points',{total:0,lastClaimDate:null,streak:0});
+}
+function canClaimDailyBonus(){return getPointsState().lastClaimDate!==todayKey()}
+/* XP earned since this tab was opened — NOT the account's lifetime total.
+   Shown on the dashboard leaderboard as "+N XP this session". Deliberately
+   sessionStorage (not localStorage) so it genuinely resets when the tab or
+   browser closes, the way "this session" reads; still user-scoped in case
+   a shared browser switches accounts without closing the tab. Only ever
+   grows here - a negative award (there are none today, but awardPoints
+   supports them) shouldn't reduce what the session already earned. */
+function getSessionXp(){return parseInt(sessionStorage.getItem(userScopedKey('sessionXP'))||'0',10)||0}
+function addSessionXp(amount){if(!(amount>0))return;sessionStorage.setItem(userScopedKey('sessionXP'),String(getSessionXp()+amount))}
+/* Fire-and-forget mirror of one XP award into the `points` table — same
+   pattern as diskSaveItem() for projects/snippets/notes: the local copy
+   already updated for instant feedback, this just keeps the account's
+   database row in sync. */
+function pointsSyncAward(amount){
+  if(!CSRF_TOKEN||!amount)return;
+  fetch(DISK_ENDPOINT+'?action=award-points',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,csrf:CSRF_TOKEN})}).catch(()=>{});
+}
+function dailyBonusAmount(streak){return Math.min(10+(Math.max(streak,1)-1)*2,30)}
+/* Extra "final benefits" reward stacked on top of the daily amount every
+   time a run of claims completes a 7-day week (day 7, 14, 21...) — shown
+   in the dashboard's 7-Day Streak calendar as the crowned final day.
+   Mirrored server-side in weeklyFinalBonus() in save-data.php. */
+const FINAL_STREAK_BONUS=15;
+function weeklyFinalBonus(streak){return streak>0&&streak%7===0?FINAL_STREAK_BONUS:0}
+/* --- Rank ladder: developer career tiers, each with 5 sub-levels ------
+   Five career tiers (Junior Developer through Principal Engineer), each
+   split into sub-levels V through I — V is the tier's entry level, I is
+   the last stop before promotion into the next tier (same convention as
+   competitive-ranking ladders). A single unleveled prestige rank sits on
+   top once the whole ladder is cleared. Numeric thresholds are generated
+   below so every tier/sub-level pair has a distinct XP floor; nothing
+   else in the file needs to know the shape of this table — getRank() and
+   getRankProgress() just walk it like a flat list. */
+const ROMAN=['','I','II','III','IV','V'];
+const CAREER_TIERS=[
+  {label:'Junior Developer',start:0,span:40,icon:'bx-code-alt',cls:'rank-junior'},
+  {label:'Developer',start:40,span:80,icon:'bx-terminal',cls:'rank-developer'},
+  {label:'Senior Developer',start:120,span:160,icon:'bx-code-curly',cls:'rank-senior'},
+  {label:'Staff Engineer',start:280,span:240,icon:'bx-server',cls:'rank-staff'},
+  {label:'Principal Engineer',start:520,span:380,icon:'bx-crown',cls:'rank-principal'}
+];
+const PRESTIGE_START=900;
+const RANKS=(function(){
+  const out=[];
+  CAREER_TIERS.forEach(function(tier){
+    const step=tier.span/5;
+    for(let sub=5;sub>=1;sub--){
+      const idx=5-sub;
+      out.push({
+        min:tier.start+idx*step,
+        tierLabel:tier.label,
+        sub:sub,
+        label:tier.label+' '+ROMAN[sub],
+        icon:tier.icon,
+        cls:tier.cls
+      });
+    }
+  });
+  out.push({min:PRESTIGE_START,tierLabel:'Distinguished Engineer',sub:null,label:'Distinguished Engineer',icon:'bx-crown',cls:'rank-distinguished'});
+  return out;
+})();
+function getRank(total){let r=RANKS[0];for(const t of RANKS){if(total>=t.min)r=t}return r}
+function getRankProgress(total){
+  const rank=getRank(total),idx=RANKS.indexOf(rank),next=RANKS[idx+1];
+  if(!next)return{rank,next:null,pct:100,toNext:0};
+  const span=next.min-rank.min;
+  const pct=Math.max(0,Math.min(100,Math.round(((total-rank.min)/span)*100)));
+  return{rank,next,pct,toNext:Math.max(0,next.min-total)};
+}
+/* Central XP award. Every gamified action should route through this so
+   the activity feed, XP bars and rank-up celebration all stay in sync. */
+function awardPoints(amount,reason){
+  if(!amount)return;
+  const before=getPointsState();
+  const beforeRank=getRank(before.total);
+  before.total=Math.max(0,before.total+amount);
+  store.set('points',before);
+  addSessionXp(amount);
+  pointsSyncAward(amount);
+  activity(reason+' ('+(amount>0?'+':'')+amount+' XP)');
+  renderPoints();
+  const afterRank=getRank(before.total);
+  if(amount>0){
+    setTimeout(()=>queueRankUps(beforeRank,afterRank,before.total),380);
+  }
+}
+function rankSubBadge(rank){return rank.sub?'<span class="rank-sub-badge '+rank.cls+'">'+ROMAN[rank.sub]+'</span>':''}
+/* Rank-up modal queue -------------------------------------------------
+   A single XP award (or daily claim) can cross more than one rank at
+   once — e.g. a big admin correction jumping from Junior Developer V
+   straight to Developer II. Rather than announcing only the final rank
+   and silently skipping the ones in between, every rank crossed gets
+   its own "RANK UP" popup, shown one after another as each is
+   dismissed, so nothing in the ladder goes uncelebrated. */
+let rankUpQueue=[];
+let rankUpTotal=0;
+let rankUpBatchSize=0;
+let rankUpShownCount=0;
+function queueRankUps(beforeRank,afterRank,total){
+  const fromIdx=RANKS.indexOf(beforeRank),toIdx=RANKS.indexOf(afterRank);
+  if(toIdx<=fromIdx)return;
+  rankUpTotal=total;
+  const wasEmpty=rankUpQueue.length===0;
+  if(wasEmpty){rankUpBatchSize=0;rankUpShownCount=0}
+  for(let i=fromIdx+1;i<=toIdx;i++){rankUpQueue.push(RANKS[i]);rankUpBatchSize++}
+  if(wasEmpty)advanceRankUpQueue();
+}
+function advanceRankUpQueue(){
+  if(!rankUpQueue.length)return;
+  rankUpShownCount++;
+  showRankUpModal(rankUpQueue[0],rankUpTotal);
+}
+/* A short, tasteful confetti burst around the rank badge — pure CSS/JS,
+   reusing the same .confetti-piece/@confettiPop primitive already used
+   for the exam-pass celebration, just anchored to the badge instead of
+   the score ring. Pieces remove themselves once the animation ends. */
+function launchRankUpConfetti(container){
+  if(!container)return;
+  const colors=['#f2c94c','#6fcf97','#56ccf2','#bb6bd9','#f2994a'];
+  for(let i=0;i<26;i++){
+    const p=document.createElement('span');
+    p.className='confetti-piece';
+    p.style.background=colors[i%colors.length];
+    p.style.left=(30+Math.random()*40)+'%';
+    p.style.setProperty('--x',Math.round(Math.random()*220-110)+'px');
+    p.style.setProperty('--r',Math.round(Math.random()*360)+'deg');
+    p.style.setProperty('--d',(700+Math.random()*500)+'ms');
+    container.appendChild(p);
+    setTimeout(()=>p.remove(),1300);
+  }
+}
+function showRankUpModal(rank,total){
+  const more=rankUpQueue.length>1;
+  const posLabel=rankUpBatchSize>1?('<div class="rankup-queue-pos">Rank '+rankUpShownCount+' of '+rankUpBatchSize+'</div>'):'';
+  const sparkAngles=[0,60,120,180,240,300];
+  const sparksHtml=sparkAngles.map((a,i)=>'<span class="rankup-spark" style="--rot:'+a+'deg;animation-delay:'+(.45+i*.05)+'s"></span>').join('');
+  openModal(`<div class="rankup-modal">
+    <div class="rankup-badge-wrap">
+      <span class="rankup-halo ${rank.cls}"></span>
+      <span class="rankup-halo rankup-halo-2 ${rank.cls}"></span>
+      ${sparksHtml}
+      <div class="rankup-badge ${rank.cls}"><i class="bx ${rank.icon}"></i></div>
+      ${rank.sub?'<span class="rankup-sub-chip '+rank.cls+'">'+ROMAN[rank.sub]+'</span>':''}
+    </div>
+    <span class="eyebrow rankup-in-1">RANK UP</span>
+    ${posLabel}
+    <h2 id="modalTitle" class="rankup-in-2">You reached ${escapeHtml(rank.tierLabel)} ${rank.sub?ROMAN[rank.sub]:''}!</h2>
+    <p class="modal-subtitle rankup-in-3">You now have <b>${total} XP</b>. Keep building, saving and running code to level up again.</p>
+    <div class="modal-footer rankup-in-4"><button class="primary-btn" data-rankup-next><i class="bx bx-party"></i> ${more?'Next':'Nice!'}</button></div>
+  </div>`,'modal-compact');
+  const wrap=modalBody?.querySelector('.rankup-badge-wrap');
+  if(wrap)setTimeout(()=>launchRankUpConfetti(wrap),150);
+}
+/* Applies today's claim purely locally — used when there's no session to
+   check against the database (shouldn't normally happen on this page) or
+   the request to claim-daily-bonus couldn't reach the server at all. */
+function claimDailyBonusLocal(){
+  const s=getPointsState();
+  if(s.lastClaimDate===todayKey()){toast('Already claimed today — come back tomorrow!');return}
+  s.streak=s.lastClaimDate===yesterdayKey()?(s.streak||0)+1:1;
+  const final=weeklyFinalBonus(s.streak),bonus=dailyBonusAmount(s.streak)+final;
+  s.lastClaimDate=todayKey();
+  store.set('points',s);
+  awardPoints(bonus,'Claimed daily bonus (streak '+s.streak+'d)'+(final?' + Day 7 final bonus':''));
+  toast(final?('Week complete! Final bonus claimed: +'+bonus+' XP!'):('Daily bonus claimed: +'+bonus+' XP!'));
+}
+/* The daily claim is decided by the `points` row in the database, not by
+   localStorage — that's what stops it from being re-claimed just by
+   clearing local storage or switching browsers. */
+function claimDailyBonus(){
+  const s=getPointsState();
+  if(s.lastClaimDate===todayKey()){toast('Already claimed today — come back tomorrow!');return}
+  if(!CSRF_TOKEN){claimDailyBonusLocal();return}
+  const btn=$('#claimDailyBonusBtn');if(btn)btn.disabled=true;
+  fetch(DISK_ENDPOINT+'?action=claim-daily-bonus',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:CSRF_TOKEN})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res&&res.ok){
+        const beforeRank=getRank(getPointsState().total);
+        store.set('points',{total:res.points.total,lastClaimDate:res.points.lastClaimDate,streak:res.points.streak});
+        activity('Claimed daily bonus (streak '+res.points.streak+'d) ('+(res.amount>0?'+':'')+res.amount+' XP)');
+        renderPoints();
+        const afterRank=getRank(res.points.total);
+        setTimeout(()=>queueRankUps(beforeRank,afterRank,res.points.total),380);
+        toast(res.isFinalDay?('Week complete! Final bonus claimed: +'+res.amount+' XP!'):('Daily bonus claimed: +'+res.amount+' XP!'));
+      }else{
+        store.set('points',{total:res&&res.points?res.points.total:getPointsState().total,lastClaimDate:res&&res.points?res.points.lastClaimDate:getPointsState().lastClaimDate,streak:res&&res.points?res.points.streak:getPointsState().streak});
+        renderPoints();
+        toast((res&&res.error)||'Could not claim right now — try again.');
+      }
+    })
+    .catch(()=>claimDailyBonusLocal());
+}
+function renderPoints(){
+  const s=getPointsState(),rank=getRank(s.total),claimable=canClaimDailyBonus(),prog=getRankProgress(s.total);
+  const rankText=$('#accountRankText');
+  if(rankText)rankText.innerHTML='<i class="bx '+rank.icon+'"></i> <b>'+rank.tierLabel+'</b> '+rankSubBadge(rank)+' <span class="muted">· '+s.total+' XP</span>';
+  const RANK_CLASSES='rank-junior rank-developer rank-senior rank-staff rank-principal rank-distinguished';
+  const avatarRing=$('#accountAvatarRing');
+  if(avatarRing){avatarRing.classList.remove(...RANK_CLASSES.split(' '));avatarRing.classList.add(rank.cls)}
+  const avatarBadge=$('#accountAvatarBadge');
+  if(avatarBadge)avatarBadge.innerHTML='<i class="bx '+rank.icon+'"></i>';
+  const menuBtn=$('#accountMenuBtn');
+  if(menuBtn){menuBtn.classList.remove(...RANK_CLASSES.split(' '));menuBtn.classList.add(rank.cls)}
+  const xpFill=$('#xpBarFill');if(xpFill)xpFill.style.width=prog.pct+'%';
+  const xpLabel=$('#xpBarLabel');if(xpLabel)xpLabel.textContent=prog.next?(prog.toNext+' XP to '+prog.next.label):'Max rank reached';
+  const claimBtn=$('#claimDailyBonusBtn');
+  if(claimBtn){
+    claimBtn.disabled=!claimable;
+    if(claimable){
+      const previewStreak=s.lastClaimDate===yesterdayKey()?(s.streak||0)+1:1;
+      claimBtn.innerHTML='<i class="bx bx-gift"></i> Claim Daily Bonus (+'+dailyBonusAmount(previewStreak)+')';
+    }else{
+      claimBtn.innerHTML='<i class="bx bx-check-circle"></i> Claimed today · Streak '+(s.streak||0)+'d';
+    }
+  }
+  const rankVal=$('#pointsRankVal');if(rankVal)rankVal.innerHTML='<i class="bx '+rank.icon+'"></i> '+rank.tierLabel+' '+rankSubBadge(rank);
+  const totalEl=$('#pointsTotalVal');if(totalEl)totalEl.textContent=s.total;
+  document.querySelectorAll('#dashRankIcon').forEach(function(el){el.className='bx '+rank.icon});
+  document.querySelectorAll('#dashRankLabel').forEach(function(el){el.innerHTML=escapeHtml(rank.tierLabel)+' '+rankSubBadge(rank)});
+  document.querySelectorAll('#dashXpFill').forEach(function(el){el.style.width=prog.pct+'%'});
+  const dashSubText=prog.next?(s.total+' / '+prog.next.min+' XP · '+prog.toNext+' XP to '+prog.next.label):(s.total+' XP · Max rank reached');
+  document.querySelectorAll('#dashXpLabel').forEach(function(el){el.textContent=dashSubText});
+  renderStreakWeek();
+  renderXpLeaderboard();
+}
+/* Dashboard "Leaderboard" panel: top 10 accounts by lifetime XP, plus a
+   "you" summary row (your own rank/total, which may not appear in that
+   top 10) and the session-XP pill. Server-driven (see the 'leaderboard'
+   action in save-data.php) since ranking across every account can't be
+   known from this browser's own localStorage alone. No-ops on any page
+   that doesn't have the panel, same guard style as renderStreakWeek(). */
+function xpLeaderboardAvatar(name,total){
+  const initial=name?String(name).trim().charAt(0).toUpperCase():'?';
+  return {initial,cls:getRank(total||0).cls};
+}
+function renderXpLeaderboard(){
+  const list=$('#xpLeaderboardList');
+  if(!list||!CSRF_TOKEN)return;
+  fetch(DISK_ENDPOINT+'?action=leaderboard')
+    .then(r=>r.json())
+    .then(res=>{
+      if(!res||!res.ok){list.innerHTML='<li class="empty">Could not load the leaderboard.</li>';return}
+      const top=res.top||[];
+      list.innerHTML=top.length?top.map(function(row,i){
+        const pos=i+1,av=xpLeaderboardAvatar(row.name,row.total),rank=getRank(row.total||0);
+        return '<li class="xp-leaderboard-row'+(row.isYou?' is-you':'')+'">'
+          +'<span class="xp-leaderboard-pos'+(pos<=3?' pos-'+pos:'')+'">#'+pos+'</span>'
+          +'<span class="avatar xp-leaderboard-avatar '+av.cls+'">'+escapeHtml(av.initial)+'</span>'
+          +'<span class="xp-leaderboard-name">'+escapeHtml(row.name)+(row.isYou?' <span class="muted">(you)</span>':'')+'</span>'
+          +'<span class="xp-leaderboard-rank" title="'+escapeHtml(rank.tierLabel)+'"><i class="bx '+rank.icon+'"></i><span class="xp-leaderboard-rank-label">'+escapeHtml(rank.tierLabel)+'</span></span>'
+          +'<span class="xp-leaderboard-xp">'+row.total+' XP</span>'
+        +'</li>';
+      }).join(''):'<li class="empty">No one has earned XP yet \u2014 be the first!</li>';
+      const you=res.you||{name:'You',total:0,rank:null},youAv=xpLeaderboardAvatar(you.name,you.total);
+      const posEl=$('#xpLeaderboardYouPos');if(posEl)posEl.textContent=you.rank?('#'+you.rank):'#\u2014';
+      const avEl=$('#xpLeaderboardYouAvatar');if(avEl){avEl.textContent=youAv.initial;avEl.className='avatar xp-leaderboard-avatar '+youAv.cls}
+      const nameEl=$('#xpLeaderboardYouName');if(nameEl)nameEl.textContent=you.name||'You';
+      const xpEl=$('#xpLeaderboardYouXp');if(xpEl)xpEl.textContent=you.total+' XP';
+      renderSessionXpPill();
+    })
+    .catch(()=>{list.innerHTML='<li class="empty">Could not load the leaderboard.</li>'});
+}
+function renderSessionXpPill(){
+  const el=$('#xpSessionPill');
+  if(el)el.innerHTML='<i class="bx bxs-bolt"></i> +'+getSessionXp()+' XP this session';
+}
+/* Drives the dashboard's 7-Day Streak calendar. The raw streak counter
+   keeps climbing forever (it's what dailyBonusAmount() scales off of),
+   but the calendar always shows it as a repeating Mon-Sun-style 7-day
+   week: cycleDay is just where the current streak lands inside that
+   week, and weekStartStreak lets each cell preview the real XP it
+   would pay out (which keeps drifting up as the raw streak grows). */
+function renderStreakWeek(){
+  const grids=document.querySelectorAll('.streak-week-grid');
+  if(!grids.length)return;
+  const s=getPointsState(),claimable=canClaimDailyBonus();
+  const effectiveStreak=claimable?(s.lastClaimDate===yesterdayKey()?(s.streak||0)+1:1):Math.max(1,s.streak||0);
+  const cycleDay=((effectiveStreak-1)%7)+1;
+  const weekStartStreak=Math.max(1,effectiveStreak-cycleDay+1);
+  grids.forEach(function(grid){
+    grid.querySelectorAll('.streak-day').forEach(function(cell){
+      const day=parseInt(cell.getAttribute('data-streak-day'),10),isFinal=day===7;
+      const dayStreak=weekStartStreak+(day-1);
+      const dayBonus=dailyBonusAmount(dayStreak)+(isFinal?FINAL_STREAK_BONUS:0);
+      const xpEl=cell.querySelector('.streak-day-xp');if(xpEl)xpEl.textContent='+'+dayBonus+' XP';
+      cell.classList.remove('claimed','current','locked');
+      let state;
+      if(day<cycleDay||(day===cycleDay&&!claimable)){state='claimed'}
+      else if(day===cycleDay&&claimable){state='current'}
+      else{state='locked'}
+      cell.classList.add(state);
+      const iconEl=cell.querySelector('.streak-day-icon .bx');
+      if(iconEl){
+        if(state==='claimed')iconEl.className='bx bx-check-circle';
+        else if(state==='current')iconEl.className='bx '+(isFinal?'bx-crown':'bx-gift')+' streak-icon-pulse';
+        else iconEl.className='bx '+(isFinal?'bx-crown':'bx-lock-alt');
+      }
+    });
+  });
+  const dayLabel=document.querySelector('#streakDayLabel');
+  if(dayLabel)dayLabel.innerHTML='<i class="bx bxs-flame"></i> Day '+cycleDay+' of 7'+((s.streak||0)>=7?(' · '+(s.streak||0)+'d streak'):'');
+  const streakBtn=$('#streakClaimBtn');
+  if(streakBtn){
+    streakBtn.disabled=!claimable;
+    if(claimable){
+      const bonus=dailyBonusAmount(effectiveStreak)+weeklyFinalBonus(effectiveStreak);
+      streakBtn.innerHTML=cycleDay===7?('<i class="bx bx-crown"></i> Claim Day 7 Final Bonus (+'+bonus+')'):('<i class="bx bx-gift"></i> Claim Daily Bonus (+'+bonus+')');
+    }else{
+      streakBtn.innerHTML='<i class="bx bx-check-circle"></i> Claimed today · Streak '+(s.streak||0)+'d';
+    }
+  }
+}
+$('#claimDailyBonusBtn')?.addEventListener('click',claimDailyBonus);
+$('#streakClaimBtn')?.addEventListener('click',claimDailyBonus);
 const GS_KEY='gsProgress';
-function getGsProgress(){try{return JSON.parse(localStorage.getItem(GS_KEY)||'{}')}catch(e){return{}}}
-function markGs(step){const p=getGsProgress();if(p[step])return;p[step]=true;localStorage.setItem(GS_KEY,JSON.stringify(p));renderGettingStarted()}
+const GS_LABELS={viewedSnippet:'Looked at a snippet',ranCode:'Ran code in the Playground',savedSnippet:'Saved your own snippet',createdProject:'Started your first project'};
+function getGsProgress(){try{return JSON.parse(localStorage.getItem(userScopedKey(GS_KEY))||'{}')}catch(e){return{}}}
+function markGs(step){
+  const p=getGsProgress();if(p[step])return;
+  p[step]=true;localStorage.setItem(userScopedKey(GS_KEY),JSON.stringify(p));renderGettingStarted();
+  awardPoints(2,'Milestone: '+(GS_LABELS[step]||step));
+  if(Object.keys(GS_LABELS).every(k=>p[k])&&!localStorage.getItem(userScopedKey('gsAllDoneBonus'))){
+    localStorage.setItem(userScopedKey('gsAllDoneBonus'),'true');
+    awardPoints(5,'Completed the beginner journey');
+  }
+}
 function renderGettingStarted(){const wrap=$('#gsSteps');if(!wrap)return;const p=getGsProgress();let done=0;wrap.querySelectorAll('.gs-step').forEach(li=>{const key=li.dataset.gs;const isDone=!!p[key];li.classList.toggle('done',isDone);if(isDone)done++});const label=$('#gsProgressLabel');if(label)label.innerHTML='<i class="bx bx-check-circle"></i> '+done+' of 4 done'}
-ensureSampleSnippets();renderProjects();renderSnippets();renderNotes();renderActivity();updateCounts();renderGettingStarted();
+ensureSampleSnippets();renderProjects();renderSnippets();renderNotes();renderActivity();updateCounts();renderGettingStarted();renderStarterRanking();renderPlaygroundLeaderboard();renderPoints();
 const tabs=$$('.tab');
 const DEFAULT_HTML=`<!doctype html>
 <html>
@@ -585,7 +1077,7 @@ const DEFAULT_JS=`document.getElementById('demoButton')?.addEventListener('click
   document.getElementById('demoButton').textContent='It works!';
 });`;
 
-let cmHtml=null,cmCss=null,cmJs=null,wrapEnabled=true;
+var cmHtml=null,cmCss=null,cmJs=null,wrapEnabled=true;
 function setEditorDirty(text){const el=$('#editorDirty');if(el)el.textContent=text}
 function activeTabName(){return document.querySelector('.tab.active')?.dataset.tab||'html'}
 function activeCm(){const t=activeTabName();return t==='css'?cmCss:t==='js'?cmJs:cmHtml}
@@ -626,26 +1118,55 @@ function beautify(kind,code){
   }catch(e){/* fall through and show the code as-is */}
   return code;
 }
+/* Unicode-safe base64 round-trip, used to hand preview code to
+   mountCodeEditor() via a data attribute without fighting HTML escaping
+   of quotes/angle-brackets in the source. */
+function b64EncodeUnicode(str){try{return btoa(unescape(encodeURIComponent(str||'')))}catch(e){return ''}}
+function b64DecodeUnicode(str){try{return decodeURIComponent(escape(atob(str||'')))}catch(e){return ''}}
+/* Turns one preview panel (built by buildCodePreviewMarkup) into a live,
+   read-only CodeMirror editor — the same library, theme and settings as
+   the Code Playground — instead of a plain <pre> block. Mounted lazily
+   (only when a panel actually becomes visible) since CodeMirror can't
+   size itself correctly inside a display:none element. */
+function mountCodeEditor(el){
+  if(!el||el.dataset.mounted==='1')return;
+  const code=b64DecodeUnicode(el.dataset.codeB64||'');
+  el.dataset.mounted='1';
+  if(typeof CodeMirror==='undefined'){el.textContent=code;return}
+  el._cm=CodeMirror(el,{
+    value:code,
+    mode:el.dataset.cmMode||'htmlmixed',
+    theme:cmThemeName(),
+    lineNumbers:true,
+    lineWrapping:true,
+    readOnly:true,
+    matchBrackets:true,
+    tabSize:2,
+    indentUnit:2,
+    viewportMargin:Infinity
+  });
+}
 /* Builds a read-only, tabbed HTML/CSS/JavaScript code preview (used in the
-   Snippets "Preview" modal) instead of one long unformatted blob — mirrors
-   the Playground's three tabs so a combined snippet is easy to read. */
+   Snippets "Preview" modal and the UI Components "View code" modal)
+   instead of one long unformatted blob — mirrors the Playground's three
+   tabs, and now its editor too, so a combined snippet is easy to read. */
 function buildCodePreviewMarkup(rawCode,sizeClass){
   const {html,css,js}=splitCombinedCode(rawCode);
   const parts=[
-    {key:'html',label:'HTML',code:beautify('html',html)},
-    {key:'css',label:'CSS',code:beautify('css',css)},
-    {key:'js',label:'JavaScript',code:beautify('js',js)}
+    {key:'html',label:'HTML',mode:'htmlmixed',code:beautify('html',html)},
+    {key:'css',label:'CSS',mode:'css',code:beautify('css',css)},
+    {key:'js',label:'JavaScript',mode:'javascript',code:beautify('js',js)}
   ].filter(p=>p.code&&p.code.trim().length);
-  if(!parts.length)parts.push({key:'html',label:'HTML',code:''});
+  if(!parts.length)parts.push({key:'html',label:'HTML',mode:'htmlmixed',code:''});
   const tabsHtml=parts.length>1?`<div class="preview-code-tabs" role="tablist">${parts.map((p,i)=>`<button class="preview-code-tab${i===0?' active':''}" type="button" data-preview-tab="${p.key}">${p.label}</button>`).join('')}</div>`:'';
-  const panelsHtml=parts.map((p,i)=>`<pre class="code-mini${sizeClass?' '+sizeClass:''} preview-code-panel${i===0?' active':''}" data-preview-panel="${p.key}">${escapeHtml(p.code)}</pre>`).join('');
+  const panelsHtml=parts.map((p,i)=>`<div class="code-mini-editor${sizeClass?' '+sizeClass:''} preview-code-panel${i===0?' active':''}" data-preview-panel="${p.key}" data-cm-mode="${p.mode}" data-code-b64="${b64EncodeUnicode(p.code)}"></div>`).join('');
   return `<div class="preview-code-frame">${tabsHtml}${panelsHtml}</div>`;
 }
 
 function initEditors(){
   const htmlEl=$('#htmlCode');
   if(!htmlEl||typeof CodeMirror==='undefined')return;
-  const common={lineNumbers:true,lineWrapping:true,theme:'material-darker',tabSize:2,indentUnit:2,matchBrackets:true,autoCloseBrackets:true,styleActiveLine:true};
+  const common={lineNumbers:true,lineWrapping:true,theme:cmThemeName(),tabSize:2,indentUnit:2,matchBrackets:true,autoCloseBrackets:true,styleActiveLine:true};
   cmHtml=CodeMirror.fromTextArea(htmlEl,Object.assign({},common,{mode:'htmlmixed'}));
   cmCss=CodeMirror.fromTextArea($('#cssCode'),Object.assign({},common,{mode:'css'}));
   cmJs=CodeMirror.fromTextArea($('#jsCode'),Object.assign({},common,{mode:'javascript'}));
@@ -704,17 +1225,35 @@ function loadPlaygroundPayload(){
 }
 loadPlaygroundPayload();
 
-function runCode(){
+/* --- XP is only ever awarded for a genuine "edit, then run" cycle ---
+   Previously runCode() unconditionally called awardPoints(), and runCode()
+   itself was also invoked automatically once whenever the Playground page
+   loaded (see the bare `runCode()` call below). Since navigating to the
+   Playground from another tab/page is a full page load in this app, that
+   auto-run silently handed out 5 XP every single time — even with zero
+   changes to the code. Fixed by: (1) the initial/automatic run and the
+   Reset button's run never award XP (award=false), and (2) a manual Run
+   only awards XP if the code actually differs from the last code that was
+   already rewarded, so repeatedly clicking Run on unchanged code, or just
+   switching tabs and coming back, no longer farms XP. */
+let lastAwardedPlaygroundCode=(cmHtml?cmHtml.getValue():($('#htmlCode')?.value||''))+'\u0000'+(cmCss?cmCss.getValue():($('#cssCode')?.value||''))+'\u0000'+(cmJs?cmJs.getValue():($('#jsCode')?.value||''));
+function runCode(award){
   const h=cmHtml?cmHtml.getValue():($('#htmlCode')?.value||'');
   const c=cmCss?cmCss.getValue():($('#cssCode')?.value||'');
   const j=cmJs?cmJs.getValue():($('#jsCode')?.value||'');
   const frame=$('#preview');if(!frame)return;
   const doc=`${h}<style>${c}</style><script>${j.replace(/<\/script>/gi,'<\\/script>')}<\/script>`;
   frame.srcdoc=doc;
-  activity('Ran code playground');markGs('ranCode');
+  if(award){
+    const snapshot=h+'\u0000'+c+'\u0000'+j;
+    if(snapshot!==lastAwardedPlaygroundCode){
+      awardPoints(5,'Ran code playground');markGs('ranCode');
+      lastAwardedPlaygroundCode=snapshot;
+    }
+  }
   const statusEl=$('#runStatus');if(statusEl){statusEl.classList.add('running');statusEl.innerHTML='<i></i> Running…';setTimeout(()=>{statusEl.classList.remove('running');statusEl.innerHTML='<i></i> Up to date'},480)}
 }
-$('#runCode')?.addEventListener('click',runCode);runCode();
+$('#runCode')?.addEventListener('click',()=>runCode(true));runCode(false);
 $('#openPreview')?.addEventListener('click',()=>{const src=$('#preview')?.srcdoc;if(!src)return;const w=window.open('about:blank','_blank');if(w){w.document.open();w.document.write(src);w.document.close()}});
 
 const previewStage=$('#previewStage'),previewMeta=$('#previewMeta');
@@ -742,7 +1281,8 @@ $('#resetCode')?.addEventListener('click',()=>{
   setEditorDirty('Saved locally');
   updateCharCount();
   updateTabIndicators();
-  runCode();
+  runCode(false);
+  lastAwardedPlaygroundCode=DEFAULT_HTML+'\u0000'+DEFAULT_CSS+'\u0000'+DEFAULT_JS;
   toast('Playground reset');
 });
 $('#clearEditor')?.addEventListener('click',()=>{
@@ -775,8 +1315,7 @@ $('#wrapToggle')?.addEventListener('click',e=>{
 });
 document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();$('#globalSearch')?.focus()}});
 $('#quickCommand')?.addEventListener('click',()=>$('#globalSearch')?.focus());
-$('#globalSearch')?.addEventListener('input',e=>{const q=e.target.value.toLowerCase().trim();if(location.search.includes('page=snippets')){const local=$('#snippetSearch');if(local){local.value=q;renderSnippets();return}}document.querySelectorAll('.project-card,.snippet-card,.note-card,.quick-card').forEach(x=>x.style.display=!q||x.textContent.toLowerCase().includes(q)?'':'none')});
-$('#clearData')?.addEventListener('click',()=>{if(confirm('Clear projects, snippets, notes and activity?')){['projects','snippets','notes','activity'].forEach(k=>localStorage.removeItem(k));location.reload()}});
+$('#globalSearch')?.addEventListener('input',e=>{const q=e.target.value.toLowerCase().trim();if(location.search.includes('page=saved-snippets')){const local=$('#savedSnippetsSearch');if(local){local.value=q;renderSavedSnippets();return}}if(location.search.includes('page=saved-components')){const local=$('#savedComponentsSearch');if(local){local.value=q;renderSavedComponents();return}}document.querySelectorAll('.project-card,.snippet-card,.note-card,.quick-card').forEach(x=>x.style.display=!q||x.textContent.toLowerCase().includes(q)?'':'none')});
 
 /* components.js runs in its own scope and needs these to save components
    into the Snippets library (and to mirror that save to disk) — without
@@ -786,8 +1325,21 @@ window.store=store;
 window.diskSaveItem=diskSaveItem;
 window.toast=toast;
 window.activity=activity;
+window.awardPoints=awardPoints;
 window.savePlaygroundPayload=savePlaygroundPayload;
 window.buildCodePreviewMarkup=buildCodePreviewMarkup;
+/* Points/rank/formatting helpers — needed by viewProfileForm() and
+   friends in the later "Accessibility + beginner-friendly additions"
+   IIFE, which runs in its own scope and otherwise can't see functions
+   declared up here. */
+window.getPointsState=getPointsState;
+window.canClaimDailyBonus=canClaimDailyBonus;
+window.getRank=getRank;
+window.getRankProgress=getRankProgress;
+window.rankSubBadge=rankSubBadge;
+window.escapeHtml=escapeHtml;
+window.escapeAttr=escapeAttr;
+window.userScopedKey=userScopedKey;
 })();
 
 /* Beginner guide interactions */
@@ -822,20 +1374,6 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
   const DISK_ENDPOINT='save-data.php';
   const CSRF_TOKEN=typeof window!=='undefined'&&window.CSRF_TOKEN?window.CSRF_TOKEN:null;
 
-  /* --- Text size control (A- / A+), persisted --- */
-  const SIZE_STEPS=['base','lg','xl'];
-  function applyTextSize(size){document.documentElement.setAttribute('data-text-size',size);localStorage.setItem('textSize',size)}
-  applyTextSize(localStorage.getItem('textSize')||'base');
-  function stepSize(dir){
-    const current=localStorage.getItem('textSize')||'base';
-    let idx=SIZE_STEPS.indexOf(current); if(idx<0)idx=0;
-    idx=Math.min(SIZE_STEPS.length-1,Math.max(0,idx+dir));
-    applyTextSize(SIZE_STEPS[idx]);
-  }
-  $('#textSizeUp')?.addEventListener('click',()=>stepSize(1));
-  $('#textSizeDown')?.addEventListener('click',()=>stepSize(-1));
-  $('#resetTextSize')?.addEventListener('click',()=>applyTextSize('base'));
-
   /* --- Mobile search toggle (topbar search is hidden below 650px) --- */
   const panel=$('#mobileSearchPanel');
   $('#mobileSearchToggle')?.addEventListener('click',()=>{
@@ -852,7 +1390,7 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
   function tourHtml(){
     return `<h2 id="modalTitle">Welcome to A-DevTools</h2><p class="modal-subtitle">A quick 4-step path if this is your first time here. You can replay this anytime from Settings.</p>
     <ol class="tour-steps">
-      <li><i class="bx bx-file-code"></i><div><b>1. Open Snippets</b><small>Browse ready-made starters and preview what they do before touching any code.</small></div></li>
+      <li><i class="bx bx-code-block"></i><div><b>1. Open Snippets</b><small>Browse ready-made starters and preview what they do before touching any code.</small></div></li>
       <li><i class="bx bx-code-alt"></i><div><b>2. Run code in the Playground</b><small>Send a starter to the Playground, change one small thing, and press "Run my code".</small></div></li>
       <li><i class="bx bx-save"></i><div><b>3. Save what you make</b><small>Turn your changes into a snippet you can reuse in future projects.</small></div></li>
       <li><i class="bx bx-folder-open"></i><div><b>4. Track a Project</b><small>Give your work a name in Projects so you can keep building on it.</small></div></li>
@@ -873,12 +1411,12 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
      tips, the playground guide steps, and the welcome tour) tailor itself to
      the visitor instead of showing the same beginner hand-holding to everyone. */
   const EXPERIENCE_LEVELS=[
-    {key:'beginner',label:'Beginner',icon:'bx-seedling',desc:"Just starting out with web development. We'll walk you through everything step-by-step, starting with a friendly welcome tour."},
+    {key:'beginner',label:'Beginner',icon:'bx-leaf',desc:"Just starting out with web development. We'll walk you through everything step-by-step, starting with a friendly welcome tour."},
     {key:'intermediate',label:'Intermediate',icon:'bx-trending-up',desc:'Comfortable with the fundamentals and ready to build. Pass a quick one-question check to unlock this title and keep bite-sized tips within reach.'},
     {key:'professional',label:'Professional',icon:'bx-medal',desc:'A seasoned developer who knows the ropes. Pass a quick one-question check to unlock this title and enjoy a clean, distraction-free workspace.'}
   ];
   function levelNeedsExam(level){return level==='intermediate'||level==='professional'}
-  function examAlreadyPassed(level){return localStorage.getItem('examPassed_'+level)==='true'}
+  function examAlreadyPassed(level){return localStorage.getItem(userScopedKey('examPassed_'+level))==='true'}
   function experienceHtml(selected){
     return `<h2 id="modalTitle">How experienced are you?</h2><p class="modal-subtitle">Pick the option that fits best. This decides how much guidance A-DevTools shows you — you can change it anytime in Settings. Use the arrow keys to browse, Enter to pick.</p>
     <div class="experience-choices" role="radiogroup" aria-label="Experience level">${EXPERIENCE_LEVELS.map(l=>{
@@ -903,11 +1441,10 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
     });
     $$('#levelTrail .level-trail-line').forEach((el,i)=>{el.classList.toggle('done',i<curIdx)});
   }
-  function applyExperienceLevel(level,animate){
+  function applyExperienceLevel(level,animate,onSettled){
     document.documentElement.setAttribute('data-experience',level);
     localStorage.setItem('experienceLevel',level);
     document.cookie='experienceLevel='+encodeURIComponent(level)+'; path=/; max-age=31536000; samesite=lax';
-    fetch(DISK_ENDPOINT+'?action=set-expertise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level,csrf:CSRF_TOKEN})}).catch(()=>{});
     const badge=$('#experienceBadge'); if(badge) badge.textContent=experienceLabel(level);
     const btnLabel=$('#experienceBtnLabel'); if(btnLabel) btnLabel.textContent=experienceLabel(level);
     const btnIcon=$('#experienceBtnIcon');
@@ -922,8 +1459,30 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
     if(animate){
       const btn=$('#experienceBtn');
       if(btn){btn.classList.remove('level-pulse');void btn.offsetWidth;btn.classList.add('level-pulse')}
-      toast('Experience set to '+experienceLabel(level));
     }
+    /* Previously this fetch had a silent .catch(()=>{}) — if the save to
+       the server failed (session expired, network hiccup, etc.) the UI
+       still cheerfully said "Experience set to X" with no indication
+       anything went wrong, even though the choice hadn't actually been
+       persisted server-side. Now it reports success/failure explicitly,
+       and (see openExperiencePicker below) the page no longer reloads
+       until this settles, so the message actually has time to be seen
+       instead of being wiped out by the reload. */
+    fetch(DISK_ENDPOINT+'?action=set-expertise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({level,csrf:CSRF_TOKEN})})
+      .then(r=>r.json().catch(()=>null))
+      .then(res=>{
+        const ok=!!(res&&res.ok!==false);
+        if(!ok){
+          toast((res&&res.error)||'Saved on this device, but couldn\u2019t sync to your account \u2014 try again later.');
+        } else if(animate){
+          toast('Experience set to '+experienceLabel(level));
+        }
+        if(typeof onSettled==='function')onSettled(ok);
+      })
+      .catch(()=>{
+        toast('Saved on this device, but couldn\u2019t reach the server to sync it.');
+        if(typeof onSettled==='function')onSettled(false);
+      });
   }
   /* --- Level-up exam: Intermediate and Professional must be earned --- */
   /* Beginner is free to pick. Moving up to Intermediate or Professional asks
@@ -951,7 +1510,7 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
     <div class="exam-progress"><div class="exam-progress-bar"><div class="exam-progress-fill" style="width:${pct}%"></div></div><span class="exam-progress-count">Question ${i+1} of ${total}</span></div>
     <div class="exam-question">${q.q}</div>
     <div class="exam-options">${q.options.map((opt,idx)=>`<button type="button" class="exam-option${picked===idx?' selected':''}" data-opt="${idx}" aria-pressed="${picked===idx}"><span class="opt-letter">${letters[idx]}</span><span>${opt}</span></button>`).join('')}</div>
-    <div class="exam-kbd-hint"><i class="bx bx-keyboard"></i> Press 1\u2013${q.options.length} to answer \u00b7 Enter for next</div>
+    <div class="exam-kbd-hint"><i class="bx bxs-keyboard"></i> Press 1\u2013${q.options.length} to answer \u00b7 Enter for next</div>
     <div class="modal-footer"><button class="ghost-btn" id="examBack"><i class="bx bx-chevron-left"></i> ${i===0?'Cancel':'Back'}</button><button class="primary-btn" id="examNext"${picked==null?' disabled':''}>${i===total-1?'Finish exam':'Next question'} <i class="bx bx-chevron-right"></i></button></div>`;
   }
   function renderExamQuestion(){
@@ -972,7 +1531,12 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
       const cfg=EXAMS[examSession.level];let correct=0;
       cfg.questions.forEach((q,idx)=>{if(examSession.answers[idx]===q.a)correct++});
       const total=cfg.questions.length,pct=Math.round((correct/total)*100),passed=pct>=cfg.passPct;
-      if(passed) localStorage.setItem('examPassed_'+examSession.level,'true');
+      /* Passing this quick check only unlocks the Intermediate/Professional
+         *title* — it's an onboarding/UI preference, not a coding
+         accomplishment, so it deliberately does NOT award XP (that used to
+         call awardPoints(50, ...) here, which let people farm XP just by
+         retaking this 1-3 question quiz). */
+      if(passed){localStorage.setItem(userScopedKey('examPassed_'+examSession.level),'true')}
       renderExamResult(passed,correct,total,pct);
     },950);
   }
@@ -1068,17 +1632,21 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
       const changed=chosen!==currentLevel;
       const proceed=()=>{
         const finish=()=>{
-          applyExperienceLevel(chosen,changed);
           closeModal();
-          if(typeof onDone==='function'){
-            onDone(chosen);
-          } else if(changed){
-            /* The Dashboard content AND the sidebar (Guided Tour quick tool,
-               "Local workspace · <level>" label) are rendered server-side per
-               level, so reload to actually show the page that matches the new
-               choice everywhere, not just update the badge text. */
-            location.reload();
-          }
+          applyExperienceLevel(chosen,changed,(ok)=>{
+            if(typeof onDone==='function'){
+              onDone(chosen);
+            } else if(changed){
+              /* The Dashboard content AND the sidebar (Guided Tour quick tool,
+                 "Local workspace · <level>" label) are rendered server-side per
+                 level, so reload to actually show the page that matches the new
+                 choice everywhere, not just update the badge text. Wait for the
+                 save to settle first — reloading immediately used to cut off
+                 the success/failure toast before it could ever be seen; on
+                 failure we also wait a bit longer so there's time to read it. */
+              setTimeout(()=>location.reload(),ok?150:1800);
+            }
+          });
         };
         if(levelNeedsExam(chosen) && !examAlreadyPassed(chosen)){
           startExam(chosen,finish,()=>openExperiencePicker(onDone));
@@ -1152,6 +1720,74 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
     observer.observe(modal,{attributes:true,attributeFilter:['class']});
   }
 
+  /* --- View Profile modal (account dropdown) ----------------------------
+     Read-only profile summary — avatar/rank/XP/stats/join date — with an
+     "Edit Profile" action inside that swaps in the actual edit form below,
+     so people see their account before jumping into editing it. */
+  function viewProfileForm(){
+    const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
+    const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
+    const initial=curName?curName.trim().charAt(0).toUpperCase():'?';
+    const s=getPointsState(),rank=getRank(s.total),prog=getRankProgress(s.total);
+    const joined=window.CURRENT_USER_JOINED_AT?new Date(String(window.CURRENT_USER_JOINED_AT).replace(' ','T')):null;
+    const joinedLabel=(joined&&!isNaN(joined))?joined.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}):'—';
+    const counts={projects:store.get('projects').length,snippets:store.get('snippets').filter(x=>snippetSource(x)==='snippet').length,components:store.get('snippets').filter(x=>snippetSource(x)==='component').length,notes:store.get('notes').length};
+    openModal(`<div class="profile-view">
+      <div class="profile-view-avatar account-avatar-ring ${rank.cls}"><span class="account-avatar-initial">${escapeHtml(initial)}</span><span class="account-avatar-badge"><i class="bx ${rank.icon}"></i></span></div>
+      <h2 class="profile-view-name">${escapeHtml(curName)}</h2>
+      <p class="muted profile-view-email">${escapeHtml(curEmail)}</p>
+      <div class="account-rank-row profile-view-rank"><i class="bx ${rank.icon}"></i> <b>${escapeHtml(rank.tierLabel)}</b> ${rankSubBadge(rank)} <span class="muted">· ${s.total} XP</span></div>
+      <div class="xp-bar"><div class="xp-bar-fill" style="width:${prog.pct}%"></div></div>
+      <div class="xp-bar-label">${prog.next?(prog.toNext+' XP to '+escapeHtml(prog.next.label)):'Max rank reached'}</div>
+      <div class="profile-stats">
+        <div class="profile-stat"><strong>${counts.projects}</strong><span>Projects</span></div>
+        <div class="profile-stat"><strong>${counts.snippets}</strong><span>Snippets</span></div>
+        <div class="profile-stat"><strong>${counts.components}</strong><span>Components</span></div>
+        <div class="profile-stat"><strong>${counts.notes}</strong><span>Notes</span></div>
+      </div>
+      <p class="muted profile-view-joined"><i class="bx bx-calendar"></i> Member since ${escapeHtml(joinedLabel)}</p>
+      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Close</button><button class="primary-btn" id="goEditProfileBtn"><i class="bx bx-pencil"></i> Edit Profile</button></div>
+    </div>`,'modal-compact');
+    const goEditBtn=$('#goEditProfileBtn');
+    if(goEditBtn)goEditBtn.onclick=()=>editProfileForm();
+  }
+
+  /* --- Edit Profile modal (opened from View Profile) --------------------- */
+  function editProfileForm(){
+    const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
+    const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
+    openModal(`<h2>Edit Profile</h2><p class="modal-subtitle">Update your account name, email, or password.</p>
+      <label>Name<input id="epName" class="input" value="${escapeAttr(curName)}" placeholder="Your name"></label>
+      <label>Email<input id="epEmail" class="input" type="email" value="${escapeAttr(curEmail)}" placeholder="you@example.com"></label>
+      <p class="muted" style="margin:0 0 8px">Leave the password fields blank to keep your current password.</p>
+      <label>Current password<input id="epCurPass" class="input" type="password" placeholder="Only needed to change your password" autocomplete="current-password"></label>
+      <label>New password<input id="epNewPass" class="input" type="password" placeholder="At least 6 characters" autocomplete="new-password"></label>
+      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`);
+    const saveBtn=$('#saveProfileBtn');
+    saveBtn.onclick=()=>{
+      const name=$('#epName').value.trim(),email=$('#epEmail').value.trim();
+      const currentPassword=$('#epCurPass').value,newPassword=$('#epNewPass').value;
+      if(!name||!email){toast('Name and email cannot be empty.');return}
+      if(newPassword&&newPassword.length<6){toast('New password needs to be at least 6 characters.');return}
+      if(newPassword&&!currentPassword){toast('Enter your current password to set a new one.');return}
+      saveBtn.disabled=true;saveBtn.innerHTML='<i class="bx bx-loader-alt bx-spin"></i> Saving...';
+      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update-profile',name,email,currentPassword,newPassword,csrf:CSRF_TOKEN})})
+        .then(r=>r.json())
+        .then(res=>{
+          if(res&&res.ok){
+            if(nameEl)nameEl.textContent=res.user.name;
+            if(emailEl)emailEl.textContent=res.user.email;
+            closeModal();
+            toast('Profile updated');
+          }else{
+            saveBtn.disabled=false;saveBtn.innerHTML='<i class="bx bx-save"></i> Save Changes';
+            toast((res&&res.error)||'Could not update profile — try again.');
+          }
+        })
+        .catch(()=>{saveBtn.disabled=false;saveBtn.innerHTML='<i class="bx bx-save"></i> Save Changes';toast('Could not reach the server — try again.')});
+    };
+  }
+
   /* --- Account menu (topbar avatar) + log out --- */
   const accountBtn=$('#accountMenuBtn'), accountDropdown=$('#accountDropdown');
   if(accountBtn && accountDropdown){
@@ -1166,6 +1802,13 @@ window.buildCodePreviewMarkup=buildCodePreviewMarkup;
       if(!accountDropdown.hidden && !e.target.closest('#accountMenu')) closeAccountMenu();
     });
     document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeAccountMenu(); });
+  }
+  const viewProfileBtn=$('#viewProfileBtn');
+  if(viewProfileBtn){
+    viewProfileBtn.addEventListener('click',()=>{
+      if(accountDropdown){accountDropdown.hidden=true;accountBtn?.setAttribute('aria-expanded','false')}
+      viewProfileForm();
+    });
   }
   const logoutBtn=$('#logoutBtn');
   if(logoutBtn){

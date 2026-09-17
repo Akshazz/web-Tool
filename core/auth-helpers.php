@@ -21,7 +21,13 @@ function publicUser($user) {
         'email' => $user['email'],
         'joinedAt' => isset($user['joined_at']) ? $user['joined_at'] : null,
         'expertiseLevel' => isset($user['expertise_level']) ? $user['expertise_level'] : null,
+        'role' => isset($user['role']) ? $user['role'] : 'user',
     );
+}
+
+/** True if the given (public or raw) user record has the admin role. */
+function isAdmin($user) {
+    return is_array($user) && isset($user['role']) && $user['role'] === 'admin';
 }
 
 function findUserByEmail($email) {
@@ -82,6 +88,31 @@ function findOrCreateOAuthUser($provider, $oauthId, $name, $email) {
     $stmt = getDb()->prepare('INSERT INTO users (id, name, email, password_hash, oauth_provider, oauth_id) VALUES (?, ?, ?, NULL, ?, ?)');
     $stmt->execute(array($id, $name !== '' ? $name : ucfirst($provider) . ' user', $storedEmail, $provider, $oauthId));
     return findUserById($id);
+}
+
+/**
+ * Reads an account's XP total / rank streak / last daily-bonus claim
+ * date from the `points` table (see database/points-migration.sql).
+ * Returns zeroed defaults both for a brand-new account (no row yet) and
+ * for an install that hasn't run that migration yet, so a missing table
+ * never breaks the page — it just means nobody has any XP on record.
+ */
+function getUserPoints($userId) {
+    try {
+        $stmt = getDb()->prepare('SELECT total, streak, last_claim_date FROM points WHERE user_id = ?');
+        $stmt->execute(array($userId));
+        $row = $stmt->fetch();
+    } catch (PDOException $e) {
+        $row = false;
+    }
+    if (!$row) {
+        return array('total' => 0, 'streak' => 0, 'lastClaimDate' => null);
+    }
+    return array(
+        'total' => (int)$row['total'],
+        'streak' => (int)$row['streak'],
+        'lastClaimDate' => $row['last_claim_date'],
+    );
 }
 
 /** Reads the logged-in user (if any) for the current session, or null. */

@@ -76,8 +76,14 @@ function csrf_verify($token) {
  * persists to a file the web server can't serve directly (see
  * data/.htaccess), and uses flock() so concurrent requests don't race.
  */
+if (!defined('ADEVTOOLS_ROOT')) {
+    // core/ sits one level below the app root — this constant lets any
+    // file in core/ (or a future nested tier) find the app root reliably
+    // no matter how deep it's stored, without hardcoding '..' everywhere.
+    define('ADEVTOOLS_ROOT', dirname(__DIR__));
+}
 function adevtools_throttle_file() {
-    $dir = __DIR__ . '/data/.security';
+    $dir = ADEVTOOLS_ROOT . '/data/.security';
     if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
     return $dir . '/login-attempts.json';
 }

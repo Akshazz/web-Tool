@@ -1300,25 +1300,28 @@
       var list = store.get('snippets');
       var id = 'component-' + c.id;
       if (list.some(function (x) { return String(x.id) === id; })) {
-        if (window.toast) toast(c.name + ' is already in your snippets');
+        if (window.toast) toast(c.name + ' is already in your Saved Components');
         return;
       }
-      var item = { id: id, title: c.name, lang: 'HTML + CSS', code: portable(c), createdAt: Date.now() };
+      var item = { id: id, title: c.name, lang: 'HTML + CSS', code: portable(c), source: 'component', category: c.cat, createdAt: Date.now() };
       list.unshift(item);
       store.set('snippets', list);
       if (window.diskSaveItem) diskSaveItem('snippets', item);
-      if (window.activity) activity('Saved component: ' + c.name);
-      if (window.toast) toast(c.name + ' saved to Snippets');
+      if (window.awardPoints) awardPoints(5, 'Saved component: ' + c.name);
+      else if (window.activity) activity('Saved component: ' + c.name);
+      if (window.updateCounts) updateCounts();
+      if (window.toast) toast(c.name + ' saved to Saved Components');
     } else if (btn.dataset.act === 'code') {
       var body = window.buildCodePreviewMarkup
-        ? buildCodePreviewMarkup(portable(c))
+        ? buildCodePreviewMarkup(portable(c), 'preview-code-xl')
         : '<pre class="modal-code">' + esc(portable(c)) + '</pre>';
       openModal(
         '<div class="modal-preview-head"><div><span class="section-kicker">' + esc(c.cat) +
         '</span><h2>' + esc(c.name) + '</h2></div></div>' + body +
         '<div class="modal-footer"><button class="ghost-btn" data-close-modal>Close</button>' +
         '<button class="primary-btn" data-cmp-copy="' + esc(c.id) + '">' +
-        '<i class="bx bx-copy"></i> Copy code</button></div>'
+        '<i class="bx bx-copy"></i> Copy code</button></div>',
+        'modal-code-view'
       );
     }
   });

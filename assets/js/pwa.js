@@ -148,12 +148,45 @@
   var langDropdown = document.getElementById('langDropdown');
   var langBackdrop = document.getElementById('langBackdrop');
 
+  // The topbar uses backdrop-filter for its glass effect, and backdrop-filter
+  // (like transform/filter) creates a containing block for position:fixed
+  // descendants. That silently re-anchors the dropdown/backdrop to the
+  // ~64px-tall topbar box instead of the real viewport, which is why the
+  // mobile sheet used to render squashed near the very top of the page
+  // instead of docked to the bottom of the screen. Moving both nodes to be
+  // direct children of <body> escapes that containing block entirely, so
+  // position:fixed means the actual viewport again, on every screen size.
+  if (langDropdown && langDropdown.parentNode !== document.body) document.body.appendChild(langDropdown);
+  if (langBackdrop && langBackdrop.parentNode !== document.body) document.body.appendChild(langBackdrop);
+
   function isLangOpen() {
     return !!(langDropdown && !langDropdown.hidden);
   }
 
+  // On wider screens the dropdown still has to appear right under the
+  // button — since it now lives in <body> instead of inside #langPicker, CSS
+  // alone can no longer anchor it there, so it's positioned here from the
+  // button's real on-screen position. Below the mobile breakpoint the CSS
+  // bottom-sheet rules take over instead (cleared inline styles let them).
+  function positionLangDropdown() {
+    if (!langDropdown || !langBtn) return;
+    if (window.innerWidth <= 560) {
+      langDropdown.style.top = '';
+      langDropdown.style.right = '';
+      langDropdown.style.left = '';
+      return;
+    }
+    var rect = langBtn.getBoundingClientRect();
+    langDropdown.style.top = Math.round(rect.bottom + 10) + 'px';
+    langDropdown.style.left = '';
+    var right = window.innerWidth - rect.right;
+    // Keep it on-screen if the button ever sits close to the left edge.
+    langDropdown.style.right = Math.max(12, Math.round(right)) + 'px';
+  }
+
   function openLangDropdown() {
     if (!langDropdown) return;
+    positionLangDropdown();
     langDropdown.hidden = false;
     if (langBackdrop) langBackdrop.hidden = false;
     langBtn && langBtn.setAttribute('aria-expanded', 'true');
@@ -180,8 +213,38 @@
   });
 
   document.addEventListener('click', function (e) {
-    if (isLangOpen() && langPicker && !langPicker.contains(e.target)) closeLangDropdown();
+    // #langDropdown now lives in <body> (see reparenting above), so a click
+    // inside it is no longer a click inside #langPicker — check both.
+    if (!isLangOpen()) return;
+    var inPicker = langPicker && langPicker.contains(e.target);
+    var inDropdown = langDropdown && langDropdown.contains(e.target);
+    if (!inPicker && !inDropdown) closeLangDropdown();
   });
+
+  /* ---------------- Responsive quick-controls relocation ---------------- */
+  // On mobile the topbar was crowded with seven separate controls (search,
+  // theme, experience level, language, help, notifications, avatar). Theme,
+  // level and language are grouped in #quickControlsGroup and, below the
+  // same 560px breakpoint the rest of the topbar already uses, get moved
+  // — as the actual live elements, not copies, so every listener and id
+  // keeps working untouched — into the account menu under "Quick settings".
+  // #quickControlsAnchor marks exactly where the group came from, so going
+  // back to a wider screen puts it right back in the topbar.
+  var quickGroup = document.getElementById('quickControlsGroup');
+  var quickAnchor = document.getElementById('quickControlsAnchor');
+  var quickMobileSlot = document.getElementById('quickControlsMobileSlot');
+
+  function placeQuickControls() {
+    if (!quickGroup || !quickAnchor || !quickMobileSlot) return;
+    var mobile = window.innerWidth <= 560;
+    if (mobile) {
+      if (quickGroup.parentNode !== quickMobileSlot) quickMobileSlot.appendChild(quickGroup);
+    } else if (quickGroup.parentNode !== quickAnchor.parentNode || quickGroup.nextSibling !== quickAnchor) {
+      quickAnchor.parentNode.insertBefore(quickGroup, quickAnchor);
+    }
+  }
+  placeQuickControls();
+  window.addEventListener('resize', placeQuickControls);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && isLangOpen()) {
       closeLangDropdown();

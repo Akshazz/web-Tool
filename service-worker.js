@@ -48,5 +48,13 @@ self.addEventListener('activate', (event) => {
 // that request.
 self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') return;
-  event.respondWith(fetch(event.request));
+  // .catch() below is required: a plain pass-through fetch() rejects
+  // (TypeError: Failed to fetch) whenever the request is interrupted —
+  // e.g. the user navigates/switches tabs mid-request, the device goes
+  // offline, or a CDN request is blocked. Without a .catch(), respondWith()
+  // is handed a rejected promise and it surfaces as an uncaught rejection
+  // in the console (service-worker.js:51) even though nothing is actually
+  // broken. Falling back to Response.error() lets the browser treat it as
+  // an ordinary failed network request instead of an unhandled exception.
+  event.respondWith(fetch(event.request).catch(() => Response.error()));
 });
