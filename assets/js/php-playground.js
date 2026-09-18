@@ -42,13 +42,19 @@
 '        return $pdo;\n' +
 '    }\n' +
 '\n' +
-'    $dbFile = "/tmp/playground.sqlite";\n' +
-'    $isNew = !file_exists($dbFile);\n' +
+'    $dataSource = "playground";\n' +
+'    $isNew = true;\n' +
 '\n' +
-'    $pdo = new PDO("sqlite:" . $dbFile);\n' +
+'    if (!in_array("pgsql", PDO::getAvailableDrivers(), true)) {\n' +
+'        throw new RuntimeException(\n' +
+'            "No usable PDO driver is available in this PHP-WASM build. " .\n' +
+'            "Available PDO drivers: " . (PDO::getAvailableDrivers() ? implode(", ", PDO::getAvailableDrivers()) : "(none)") . "."\n' +
+'        );\n' +
+'    }\n' +
+'\n' +
+'    $pdo = new PDO("pgsql:dbname=" . $dataSource);\n' +
 '    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);\n' +
 '    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);\n' +
-'    $pdo->exec("PRAGMA foreign_keys = ON");\n' +
 '\n' +
 '    if ($isNew) {\n' +
 '        $pdo->exec("\n' +
@@ -62,7 +68,7 @@
 '        ");\n' +
 '        $pdo->exec("\n' +
 '            CREATE TABLE projects (\n' +
-'                id INTEGER PRIMARY KEY AUTOINCREMENT,\n' +
+'                id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n' +
 '                user_id TEXT NOT NULL,\n' +
 '                name TEXT NOT NULL,\n' +
 '                tech TEXT,\n' +
@@ -73,7 +79,7 @@
 '        ");\n' +
 '        $pdo->exec("\n' +
 '            CREATE TABLE notes (\n' +
-'                id INTEGER PRIMARY KEY AUTOINCREMENT,\n' +
+'                id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,\n' +
 '                user_id TEXT NOT NULL,\n' +
 '                title TEXT NOT NULL,\n' +
 '                body TEXT,\n' +
@@ -586,9 +592,15 @@
 
   async function loadEngine() {
     try {
+      // This build's only usable PDO driver ("pgsql") is backed by PGlite
+      // (WASM Postgres); the driver requires the actual PGlite class to be
+      // injected as a constructor arg. PGlite is vendored locally under
+      // assets/vendor/pglite so this still works offline, behind a strict
+      // Content-Security-Policy, or when a CDN is blocked/unreachable.
+      var pgliteMod = await import('../vendor/pglite/index.js');
       var mod = await import('../vendor/php-wasm/PhpWeb.mjs');
       var PhpWeb = mod.PhpWeb;
-      php = new PhpWeb();
+      php = new PhpWeb({ PGlite: pgliteMod.PGlite });
 
       php.addEventListener('output', function (event) {
         appendOutput(event.detail + '\n', false);
@@ -602,8 +614,10 @@
         runBtn.disabled = false;
       });
     } catch (err) {
+      console.error('[php-playground] engine failed to load:', err);
       setEngineStatus(false, 'Engine failed to load');
-      appendOutput('Could not load the PHP engine. Check your internet connection and reload the page.\n' + err, true);
+      var detail = (err && (err.message || String(err))) || 'Unknown error';
+      appendOutput('Could not load the PHP engine: ' + detail + '\nOpen the browser console (F12) for the full error.\n', true);
     }
   }
 

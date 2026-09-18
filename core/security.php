@@ -50,7 +50,7 @@ function adevtools_security_headers() {
         "font-src 'self' https://cdnjs.cloudflare.com; " .
         "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com; " .
         "img-src 'self' data:; " .
-        "connect-src 'self'; " .
+        "connect-src 'self' data:; " .
         "frame-ancestors 'self';"
     );
 }

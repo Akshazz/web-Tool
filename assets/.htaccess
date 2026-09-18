@@ -1,0 +1,9 @@
+# Some Apache/XAMPP installs ship an old mime.types file that has no entry
+# for .wasm (or serves it as application/octet-stream). Browsers require
+# WebAssembly to be served as application/wasm for WebAssembly.instantiateStreaming()
+# to work — without this, the PHP-WASM / PGlite engine used by the SQL and
+# PHP playgrounds can fail to load with an opaque "Engine failed to load" error.
+<IfModule mod_mime.c>
+    AddType application/wasm .wasm
+    AddType application/octet-stream .data
+</IfModule>
