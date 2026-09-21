@@ -16,9 +16,11 @@
  * in config.php under the 'oauth' key — see the comments there.
  */
 require_once __DIR__ . '/core/security.php';
-adevtools_start_session();
-adevtools_security_headers();
+acodeplayground_start_session();
+acodeplayground_security_headers();
 require_once __DIR__ . '/core/auth-helpers.php';
+require_once __DIR__ . '/core/google.php';
+require_once __DIR__ . '/core/oauth-providers.php';
 
 $config = require __DIR__ . '/core/config.php';
 $oauthConfig = isset($config['oauth']) ? $config['oauth'] : array();
@@ -29,7 +31,7 @@ $intent = isset($_GET['intent']) && $_GET['intent'] === 'login' ? 'login' : 'sig
 $providers = array('google', 'github', 'facebook');
 
 function oauth_fail($message, $intent) {
-    header('Location: ?page=landing&oauth_error=' . rawurlencode($message) . '&oauth_intent=' . rawurlencode($intent));
+    header('Location: index.php?page=landing&oauth_error=' . rawurlencode($message) . '&oauth_intent=' . rawurlencode($intent));
     exit;
 }
 
@@ -63,8 +65,38 @@ $creds = isset($oauthConfig[$provider]) ? $oauthConfig[$provider] : array();
 $clientId = isset($creds['client_id']) ? trim((string)$creds['client_id']) : '';
 $clientSecret = isset($creds['client_secret']) ? trim((string)$creds['client_secret']) : '';
 
+// Google credentials can be managed from the admin dashboard (Integrations →
+// Google Drive); when the admin lets the same client power sign-in, prefer them.
+// GitHub and Facebook credentials are managed there too (sidebar → GitHub / Facebook,
+// see core/oauth-providers.php) and take priority over
+// core/config.php. The Site address saved in the dashboard is the canonical one
+// for all three providers (no need to keep a second copy in config.php).
+$gsAll = google_settings();
+if ($gsAll['source'] === 'dashboard' && $gsAll['base_url'] !== '') { $baseUrl = $gsAll['base_url']; }
+
+if ($provider === 'google') {
+    $gs = $gsAll;
+    if ($gs['source'] === 'dashboard' && $gs['use_for_signin'] && $gs['client_id'] !== '' && $gs['client_secret'] !== '') {
+        $clientId = $gs['client_id'];
+        $clientSecret = $gs['client_secret'];
+        if ($gs['base_url'] !== '') { $baseUrl = $gs['base_url']; }
+    }
+}
+
+if ($provider === 'github' || $provider === 'facebook') {
+    $ps = oauth_provider_settings($provider);
+    if ($ps['source'] === 'dashboard' && !$ps['enabled']) {
+        oauth_fail(oauth_provider_label($provider) . ' sign-in is turned off by the site owner.', $intent);
+    }
+    if ($ps['client_id'] !== '' && $ps['client_secret'] !== '') {
+        $clientId = $ps['client_id'];
+        $clientSecret = $ps['client_secret'];
+    }
+}
+
 if ($clientId === '' || $clientSecret === '' || $baseUrl === '') {
-    oauth_fail(ucfirst($provider) . ' sign-in isn\'t set up yet. The site owner needs to add ' . ucfirst($provider) . ' OAuth credentials to config.php.', $intent);
+    oauth_fail(ucfirst($provider) . ' sign-in isn\'t set up yet. The site owner needs to add ' . ucfirst($provider) . ' OAuth credentials in the admin dashboard (sidebar → GitHub / Facebook) or in core/config.php'
+        . ($baseUrl === '' ? ' and set the Site address.' : '.'), $intent);
 }
 
 $redirectUri = $baseUrl . '/oauth.php?provider=' . $provider;
@@ -105,7 +137,7 @@ if (isset($_GET['code'])) {
                 'redirect_uri' => $redirectUri,
             ));
             if (empty($token['access_token'])) { oauth_fail('GitHub sign-in failed. Please try again.', $expectedIntent); }
-            $authHeader = array('Authorization: Bearer ' . $token['access_token'], 'User-Agent: A-DevTools');
+            $authHeader = array('Authorization: Bearer ' . $token['access_token'], 'User-Agent: A-Code Playground');
             $info = oauth_http('https://api.github.com/user', 'GET', array(), $authHeader);
             if (empty($info['id'])) { oauth_fail('Could not read your GitHub profile.', $expectedIntent); }
             $email = isset($info['email']) ? $info['email'] : '';
@@ -123,7 +155,7 @@ if (isset($_GET['code'])) {
         }
 
         if ($provider === 'facebook') {
-            $token = oauth_http('https://graph.facebook.com/v19.0/oauth/access_token', 'GET', array(
+            $token = oauth_http('https://graph.facebook.com/' . ACODEPLAYGROUND_FB_GRAPH_VERSION . '/oauth/access_token', 'GET', array(
                 'code' => $code, 'client_id' => $clientId, 'client_secret' => $clientSecret,
                 'redirect_uri' => $redirectUri,
             ));
@@ -143,7 +175,7 @@ if (isset($_GET['code'])) {
     $user = findOrCreateOAuthUser($provider, $profile['id'], $profile['name'], $profile['email']);
     session_regenerate_id(true); // fresh session ID on privilege change — blocks session fixation
     $_SESSION['userId'] = $user['id'];
-    header('Location: ?page=dashboard');
+    header('Location: index.php?page=dashboard');
     exit;
 }
 
@@ -165,7 +197,7 @@ if ($provider === 'google') {
         'scope' => 'read:user user:email', 'state' => $state,
     ));
 } else {
-    $authorizeUrl = 'https://www.facebook.com/v19.0/dialog/oauth?' . http_build_query(array(
+    $authorizeUrl = 'https://www.facebook.com/' . ACODEPLAYGROUND_FB_GRAPH_VERSION . '/dialog/oauth?' . http_build_query(array(
         'client_id' => $clientId, 'redirect_uri' => $redirectUri, 'response_type' => 'code',
         'scope' => 'email public_profile', 'state' => $state,
     ));

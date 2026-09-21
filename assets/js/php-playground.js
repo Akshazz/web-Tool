@@ -16,6 +16,27 @@
 
   if (!editor || !runBtn) return; // not on this page
 
+  // Same editor look as the rest of A-Code Playground: CodeMirror with
+  // line numbers, PHP syntax highlighting and the shared light/dark theme,
+  // instead of a plain textarea. Falls back to the plain textarea if the
+  // CodeMirror CDN script didn't load.
+  var cm = null;
+  var programmatic = false;
+  function themeName() {
+    return window.cmThemeName ? window.cmThemeName() : (document.body.classList.contains('dark') ? 'material-darker' : 'neat');
+  }
+  if (typeof CodeMirror !== 'undefined') {
+    cm = CodeMirror.fromTextArea(editor, {
+      lineNumbers: true, lineWrapping: true, theme: themeName(), tabSize: 2, indentUnit: 2,
+      matchBrackets: true, autoCloseBrackets: true, styleActiveLine: true, mode: 'application/x-httpd-php'
+    });
+    new MutationObserver(function () { cm.setOption('theme', themeName()); })
+      .observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    cm.on('change', function () { if (programmatic) return; updateCharCount(); setDirty(true); saveDraft(); });
+  }
+  function getCode() { return cm ? cm.getValue() : editor.value; }
+  function setCode(v) { programmatic = true; if (cm) cm.setValue(v); else editor.value = v; programmatic = false; }
+
   var CURRENT_USER_ID = (typeof window !== 'undefined' && window.CURRENT_USER_ID) ? String(window.CURRENT_USER_ID) : 'guest';
   var STORAGE_KEY = 'u:' + CURRENT_USER_ID + ':php-playground:code';
   var STORAGE_SAMPLE_KEY = 'u:' + CURRENT_USER_ID + ':php-playground:sample';
@@ -55,6 +76,11 @@
 '    $pdo = new PDO("pgsql:dbname=" . $dataSource);\n' +
 '    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);\n' +
 '    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);\n' +
+'\n' +
+'    // The sandbox database survives page reloads, so only create and seed it once.\n' +
+'    if ($pdo->query("SELECT to_regclass(\'public.users\')")->fetchColumn()) {\n' +
+'        $isNew = false;\n' +
+'    }\n' +
 '\n' +
 '    if ($isNew) {\n' +
 '        $pdo->exec("\n' +
@@ -119,8 +145,7 @@
 '    }\n' +
 '    echo count($rows) . " row(s)\\n";\n' +
 '}\n' +
-'}\n' +
-'?>\n';
+'}\n';
 
   // Strips a single leading "<?php" tag from user code so it can be
   // appended after DB_PRELUDE inside one PHP run (avoids two separate
@@ -360,7 +385,7 @@
       code:
 '<?php\n' +
 '$data = [\n' +
-'    "name" => "A-DevTools",\n' +
+'    "name" => "A-Code Playground",\n' +
 '    "version" => 2,\n' +
 '    "tags" => ["php", "playground", "learning"],\n' +
 '];\n' +
@@ -476,6 +501,63 @@
 '\n' +
 'echo "\\nFinal notes table:\\n";\n' +
 'printRows($db->query("SELECT id, user_id, title FROM notes")->fetchAll());\n'
+    },
+    {
+      name: 'Full page: SQL + PHP + HTML/CSS/JS',
+      code:
+'<?php\n' +
+'// One file, every layer: SQL -> PHP -> HTML + CSS + JavaScript.\n' +
+'// Press Run, then use the "Page" view to see it rendered.\n' +
+'// (The "Console" view shows the raw output instead.)\n' +
+'\n' +
+'$pdo      = getDb();\n' +
+'$projects = $pdo->query(\n' +
+'    \'SELECT p.id, p.name, p.tech, u.name AS owner\n' +
+'       FROM projects p\n' +
+'       JOIN users u ON u.id = p.user_id\n' +
+'      ORDER BY p.id\'\n' +
+')->fetchAll();\n' +
+'\n' +
+'if (!function_exists(\'e\')) {\n' +
+'    function e($value) { return htmlspecialchars((string) $value, ENT_QUOTES, \'UTF-8\'); }\n' +
+'}\n' +
+'?>\n' +
+'<!doctype html>\n' +
+'<html>\n' +
+'<head>\n' +
+'  <meta charset="utf-8">\n' +
+'  <style>\n' +
+'    body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #f5f6f8; color: #15171a; }\n' +
+'    h1 { margin: 0 0 4px; font-size: 26px; }\n' +
+'    p { margin: 0 0 16px; color: #68707a; }\n' +
+'    input { width: 240px; margin-bottom: 12px; padding: 9px 12px; border: 1px solid #d5d9de; border-radius: 9px; }\n' +
+'    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: hidden; }\n' +
+'    th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e3e6ea; }\n' +
+'    th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #68707a; }\n' +
+'  </style>\n' +
+'</head>\n' +
+'<body>\n' +
+'  <h1>Projects (<?= count($projects) ?>)</h1>\n' +
+'  <p>Rows come from SQL through PDO, the table is built by PHP, and the filter box is JavaScript.</p>\n' +
+'  <input id="filter" placeholder="Filter by name...">\n' +
+'  <table>\n' +
+'    <thead><tr><th>ID</th><th>Name</th><th>Framework</th><th>Owner</th></tr></thead>\n' +
+'    <tbody>\n' +
+'    <?php foreach ($projects as $p): ?>\n' +
+'      <tr><td><?= e($p[\'id\']) ?></td><td><?= e($p[\'name\']) ?></td><td><?= e($p[\'tech\']) ?></td><td><?= e($p[\'owner\']) ?></td></tr>\n' +
+'    <?php endforeach; ?>\n' +
+'    </tbody>\n' +
+'  </table>\n' +
+'  <script>\n' +
+'    document.getElementById(\'filter\').addEventListener(\'input\', function (event) {\n' +
+'      var q = event.target.value.toLowerCase();\n' +
+'      document.querySelectorAll(\'tbody tr\').forEach(function (row) {\n' +
+'        row.style.display = row.textContent.toLowerCase().includes(q) ? \'\' : \'none\';\n' +
+'      });\n' +
+'    });\n' +
+'  </script>\n' +
+'</body>\n' +
+'</html>\n'
     }
   ];
 
@@ -492,7 +574,7 @@
 
   function saveDraft(sampleIndex) {
     try {
-      localStorage.setItem(STORAGE_KEY, editor.value);
+      localStorage.setItem(STORAGE_KEY, getCode());
       if (sampleIndex !== undefined) localStorage.setItem(STORAGE_SAMPLE_KEY, String(sampleIndex));
     } catch (e) { /* storage unavailable */ }
   }
@@ -504,7 +586,7 @@
       var sampleIndex = savedSample !== null ? (parseInt(savedSample, 10) || 0) : 0;
       if (sampleSelect) sampleSelect.value = String(sampleIndex);
       if (saved !== null) {
-        editor.value = saved;
+        setCode(saved);
         return true;
       }
     } catch (e) { /* ignore */ }
@@ -512,7 +594,7 @@
   }
 
   function updateCharCount() {
-    if (charCount) charCount.textContent = editor.value.length + ' chars';
+    if (charCount) charCount.textContent = getCode().length + ' chars';
   }
 
   function setDirty(isDirty) {
@@ -520,26 +602,29 @@
     dirtyLabel.textContent = isDirty ? 'Unsaved changes' : 'Local only';
   }
 
-  // Tab key inserts spaces instead of moving focus
-  editor.addEventListener('keydown', function (e) {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      var start = editor.selectionStart;
-      var end = editor.selectionEnd;
-      editor.value = editor.value.substring(0, start) + '    ' + editor.value.substring(end);
-      editor.selectionStart = editor.selectionEnd = start + 4;
-    }
-  });
-  editor.addEventListener('input', function () {
-    updateCharCount();
-    setDirty(true);
-    saveDraft();
-  });
+  // Plain-textarea fallback only (CodeMirror handles Tab-to-indent and
+  // change tracking itself via the cm.on('change', ...) listener above).
+  if (!cm) {
+    editor.addEventListener('keydown', function (e) {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        var start = editor.selectionStart;
+        var end = editor.selectionEnd;
+        editor.value = editor.value.substring(0, start) + '    ' + editor.value.substring(end);
+        editor.selectionStart = editor.selectionEnd = start + 4;
+      }
+    });
+    editor.addEventListener('input', function () {
+      updateCharCount();
+      setDirty(true);
+      saveDraft();
+    });
+  }
 
   if (sampleSelect) {
     sampleSelect.addEventListener('change', function () {
       var i = parseInt(sampleSelect.value, 10) || 0;
-      editor.value = SAMPLES[i].code;
+      setCode(SAMPLES[i].code);
       updateCharCount();
       setDirty(false);
       saveDraft(i);
@@ -549,7 +634,7 @@
   if (resetBtn) {
     resetBtn.addEventListener('click', function () {
       var i = sampleSelect ? (parseInt(sampleSelect.value, 10) || 0) : 0;
-      editor.value = SAMPLES[i].code;
+      setCode(SAMPLES[i].code);
       updateCharCount();
       setDirty(false);
       saveDraft(i);
@@ -572,6 +657,12 @@
     if (isError) span.className = 'err-line';
     span.textContent = text;
     consoleEl.appendChild(span);
+    if (/Cannot redeclare/.test(text)) {
+      var hint = document.createElement('span');
+      hint.className = 'err-line';
+      hint.textContent = 'Tip: the engine keeps functions and classes between runs. Reload this page to run code that declares them again.\n';
+      consoleEl.appendChild(hint);
+    }
     consoleEl.scrollTop = consoleEl.scrollHeight;
   }
 
@@ -602,11 +693,15 @@
       var PhpWeb = mod.PhpWeb;
       php = new PhpWeb({ PGlite: pgliteMod.PGlite });
 
+      // php-wasm already delivers each line with its own newline, so the
+      // console appends stdout as-is (adding another "\n" double-spaced it).
       php.addEventListener('output', function (event) {
-        appendOutput(event.detail + '\n', false);
+        appendOutput(event.detail, false);
+        document.dispatchEvent(new CustomEvent('adev:php-output', { detail: { text: event.detail } }));
       });
       php.addEventListener('error', function (event) {
-        appendOutput(event.detail + '\n', true);
+        var msg = /\n$/.test(event.detail) ? event.detail : event.detail + '\n';
+        appendOutput(msg, true);
       });
       php.addEventListener('ready', function () {
         engineReady = true;
@@ -632,8 +727,9 @@
     marker.className = 'run-marker';
     marker.textContent = '— run started —';
     if (consoleEl) consoleEl.appendChild(marker);
+    document.dispatchEvent(new CustomEvent('adev:php-run'));
     try {
-      var fullCode = DB_PRELUDE + stripOpenTag(editor.value);
+      var fullCode = DB_PRELUDE + stripOpenTag(getCode());
       await php.run(fullCode);
       if (window.toast) window.toast('Code ran successfully');
     } catch (err) {
@@ -641,6 +737,7 @@
     } finally {
       runBtn.disabled = false;
       runBtn.innerHTML = originalHtml;
+      document.dispatchEvent(new CustomEvent('adev:php-done'));
     }
   });
 
@@ -648,9 +745,31 @@
   populateSamples();
   var hadDraft = loadDraft();
   if (!hadDraft) {
-    editor.value = SAMPLES[0].code;
+    setCode(SAMPLES[0].code);
   }
+
+  // Code handed over from the UI Components / Snippets pages ("Playground" button).
+  try {
+    var handoff = sessionStorage.getItem('acodeplaygroundPhpPayload');
+    if (handoff) {
+      var payload = JSON.parse(handoff);
+      var handoffTitle = sessionStorage.getItem('acodeplaygroundPhpPayloadTitle') || 'Snippet';
+      sessionStorage.removeItem('acodeplaygroundPhpPayload');
+      sessionStorage.removeItem('acodeplaygroundPhpPayloadTitle');
+      if (payload && typeof payload.code === 'string') {
+        setCode(payload.code);
+        saveDraft();
+        if (window.toast) window.toast('Loaded "' + handoffTitle + '" into the PHP Playground. Press Run.');
+      }
+    }
+  } catch (e) { /* ignore a bad payload */ }
   updateCharCount();
   setDirty(false);
-  loadEngine();
+
+  // The combined Playground page loads this engine only when PHP is first used.
+  if (window.ADEV_LAZY_ENGINES) {
+    document.addEventListener('adev:start-php', function () { loadEngine(); }, { once: true });
+  } else {
+    loadEngine();
+  }
 })();

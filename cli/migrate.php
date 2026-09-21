@@ -2,7 +2,7 @@
 /**
  * One-time migration: copies the old data/projects.json, data/notes.json
  * and data/snippets.json files into the MySQL tables created by
- * sql/a-devtools-schema.sql.
+ * sql/a-codeplayground-schema.sql.
  *
  * Those files predate the "Community" accounts feature, so they don't
  * belong to anyone yet — you choose which account should own them.

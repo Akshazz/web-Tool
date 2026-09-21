@@ -1,0 +1,30 @@
+{"t":1789979147,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789980444,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789981149,"event":"sign-out","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Locked Admin Control","ip":"::1"}
+{"t":1789981229,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789981237,"event":"google connection tested","ok":false,"actor":"akshaz.masteh@gmail.com","detail":"1 problem(s) found","ip":"::1"}
+{"t":1789981456,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026 \u00b7 secret updated","ip":"::1"}
+{"t":1789981457,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026","ip":"::1"}
+{"t":1789981458,"event":"google connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1789981584,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026","ip":"::1"}
+{"t":1789981586,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026","ip":"::1"}
+{"t":1789981586,"event":"google connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1789981667,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026","ip":"::1"}
+{"t":1789981668,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026","ip":"::1"}
+{"t":1789981669,"event":"google connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1789981809,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026","ip":"::1"}
+{"t":1789981810,"event":"google connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1789981950,"event":"google settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Drive backup on \u00b7 client 360818796245-p\u2026 \u00b7 secret updated","ip":"::1"}
+{"t":1789981950,"event":"google connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1789984071,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789984073,"event":"sign-out","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Locked Admin Control","ip":"::1"}
+{"t":1789984893,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789985205,"event":"sign-out","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Locked Admin Control","ip":"::1"}
+{"t":1789985208,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789986196,"event":"sign-out","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Locked Admin Control","ip":"::1"}
+{"t":1789986221,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789986425,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789988468,"event":"github settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Sign-in on \u00b7 client Ov23lika2Op1\u2026 \u00b7 secret updated","ip":"::1"}
+{"t":1789988483,"event":"github connection tested","ok":false,"actor":"akshaz.masteh@gmail.com","detail":"1 problem(s) found","ip":"::1"}
+{"t":1789988537,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1789988682,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}

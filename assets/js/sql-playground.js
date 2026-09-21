@@ -14,6 +14,7 @@
   var statusText = $('#sqlEngineStatusText');
   var statusDot = $('#sqlEngineStatus');
   var schemaEl = $('#sqlSchema');
+  var lineGutter = $('#sqlLineGutter');
 
   if (!editor || !runBtn) return; // not on this page
 
@@ -87,40 +88,142 @@
     '        $exists = false;',
     '    }',
     '    if (!$exists) { play_seed($db); }',
+    '    else { play_migrate($db); }',
     '    return $db;',
     '}',
     '',
+    '// Self-healing schema migration for databases seeded by an older build of',
+    '// this playground, back when total/price/unit_price were REAL instead of',
+    '// NUMERIC(10,2). Postgres has round(numeric) and round(numeric,int) but no',
+    '// round(double precision,int) overload, so any REAL column silently breaks',
+    '// the very common "ROUND(AVG(x), 2)" pattern. Run through $db->query() (not',
+    '// ->exec()) and wrapped in try/catch so a failure here is just reported,',
+    '// never a wedged engine \u2014 same reasoning as the $exists check above.',
+    'function play_migrate($db) {',
+    '    try {',
+    '        $db->query("',
+    '            DO $$',
+    '            DECLARE r RECORD;',
+    '            BEGIN',
+    '                FOR r IN',
+    '                    SELECT table_name, column_name FROM information_schema.columns',
+    '                    WHERE table_schema = \'public\'',
+    '                      AND data_type IN (\'real\', \'double precision\')',
+    '                      AND (table_name, column_name) IN (',
+    '                          (\'orders\', \'total\'), (\'products\', \'price\'), (\'order_items\', \'unit_price\')',
+    '                      )',
+    '                LOOP',
+    '                    EXECUTE format(',
+    '                        \'ALTER TABLE %I ALTER COLUMN %I TYPE NUMERIC(10,2) USING %I::numeric(10,2)\',',
+    '                        r.table_name, r.column_name, r.column_name',
+    '                    );',
+    '                END LOOP;',
+    '            END;',
+    '            $$;',
+    '        ");',
+    '    } catch (Throwable $e) { /* best effort \u2014 a manual Reset database still fixes it */ }',
+    '}',
+    '',
 
-    '// MySQL functions that SQLite does not ship with.',
+    '// MySQL-only functions Postgres does not ship with, registered as real',
+    '// Postgres functions once per connection (CREATE OR REPLACE is idempotent,',
+    '// so re-running this on every query is cheap and always safe).',
+    '//',
+    '// Earlier builds tried to register these with PDO::sqliteCreateFunction(),',
+    '// which only exists on the sqlite PDO driver. This build\'s only driver is',
+    '// "pgsql" (backed by PGlite/real Postgres), so that call silently no-opped',
+    '// every time \u2014 none of these ever actually worked. Defining them as native',
+    '// SQL/PLpgSQL functions instead means they run inside the same engine that',
+    '// executes the query, so aggregates, GROUP BY, joins, etc. all compose with',
+    '// them normally (a PHP callback shim could never support that).',
     'function play_register_mysql_functions($db) {',
-    '    if (!method_exists($db, "sqliteCreateFunction")) { return; }',
-    '    $db->sqliteCreateFunction("NOW", function () { return date("Y-m-d H:i:s"); }, 0);',
-    '    $db->sqliteCreateFunction("CURDATE", function () { return date("Y-m-d"); }, 0);',
-    '    $db->sqliteCreateFunction("CURTIME", function () { return date("H:i:s"); }, 0);',
-    '    $db->sqliteCreateFunction("CONCAT", function () { $a = func_get_args(); foreach ($a as $v) { if ($v === null) { return null; } } return implode("", $a); });',
-    '    $db->sqliteCreateFunction("CONCAT_WS", function () { $a = func_get_args(); $sep = array_shift($a); $out = array(); foreach ($a as $v) { if ($v !== null) { $out[] = $v; } } return implode($sep, $out); });',
-    '    $db->sqliteCreateFunction("IF", function ($c, $t, $f) { return $c ? $t : $f; }, 3);',
-    '    $db->sqliteCreateFunction("YEAR", function ($d) { return $d === null ? null : (int)date("Y", strtotime($d)); }, 1);',
-    '    $db->sqliteCreateFunction("MONTH", function ($d) { return $d === null ? null : (int)date("n", strtotime($d)); }, 1);',
-    '    $db->sqliteCreateFunction("DAY", function ($d) { return $d === null ? null : (int)date("j", strtotime($d)); }, 1);',
-    '    $db->sqliteCreateFunction("MONTHNAME", function ($d) { return $d === null ? null : date("F", strtotime($d)); }, 1);',
-    '    $db->sqliteCreateFunction("DATEDIFF", function ($a, $b) { return (int)floor((strtotime($a) - strtotime($b)) / 86400); }, 2);',
-    '    $db->sqliteCreateFunction("DATE_FORMAT", function ($d, $f) {',
-    '        if ($d === null) { return null; }',
-    '        $map = array("%Y" => "Y", "%y" => "y", "%m" => "m", "%c" => "n", "%d" => "d", "%e" => "j", "%H" => "H", "%i" => "i", "%s" => "s", "%M" => "F", "%b" => "M", "%W" => "l", "%a" => "D", "%p" => "A");',
-    '        $out = ""; $len = strlen($f); $ts = strtotime($d);',
-    '        for ($i = 0; $i < $len; $i++) {',
-    '            if ($f[$i] === "%" && $i + 1 < $len) { $tok = substr($f, $i, 2); $out .= isset($map[$tok]) ? date($map[$tok], $ts) : substr($tok, 1); $i++; }',
-    '            else { $out .= $f[$i]; }',
-    '        }',
-    '        return $out;',
-    '    }, 2);',
-    '    $db->sqliteCreateFunction("LEFT", function ($s, $n) { return $s === null ? null : substr($s, 0, (int)$n); }, 2);',
-    '    $db->sqliteCreateFunction("RIGHT", function ($s, $n) { return $s === null ? null : substr($s, -(int)$n); }, 2);',
-    '    $db->sqliteCreateFunction("LOCATE", function ($n, $h) { $p = strpos($h, $n); return $p === false ? 0 : $p + 1; }, 2);',
-    '    $db->sqliteCreateFunction("REPEAT", function ($s, $n) { return str_repeat($s, max(0, (int)$n)); }, 2);',
-    '    $db->sqliteCreateFunction("RAND", function () { return mt_rand() / mt_getrandmax(); }, 0);',
-    '    $db->sqliteCreateFunction("POW", function ($a, $b) { return pow($a, $b); }, 2);',
+    '    // IMPORTANT: pdo_pglite routes exec() through PGlite\'s extended query',
+    '    // protocol, which accepts exactly ONE statement per call \u2014 feed it a',
+    '    // semicolon-separated batch and it throws "cannot insert multiple',
+    '    // commands into a prepared statement". Worse, the JS bridge for exec()',
+    '    // does not catch that rejection, so it never reaches this PHP try/catch',
+    '    // as a Throwable \u2014 it surfaces as an unhandled promise rejection in the',
+    '    // console instead, and none of the functions below get registered. So',
+    '    // each CREATE OR REPLACE FUNCTION is issued as its own exec() call.',
+    '    $statements = [',
+    '        "CREATE OR REPLACE FUNCTION ifnull(anyelement, anyelement) RETURNS anyelement AS $$ SELECT COALESCE($1, $2) $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION ifnull(integer, integer) RETURNS integer AS $$ SELECT COALESCE($1, $2) $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION ifnull(numeric, numeric) RETURNS numeric AS $$ SELECT COALESCE($1, $2) $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION ifnull(text, text) RETURNS text AS $$ SELECT COALESCE($1, $2) $$ LANGUAGE SQL IMMUTABLE",',
+    '',
+    '        // MySQL\'s IF(cond, then, else) as a value expression. Postgres can\'t',
+    '        // resolve a single polymorphic overload against untyped string/number',
+    '        // literals, so the two shapes actually used in practice are covered',
+    '        // as concrete overloads; anything else, use a CASE expression instead.',
+    '        "CREATE OR REPLACE FUNCTION \\"if\\"(boolean, text, text) RETURNS text AS $$ SELECT CASE WHEN $1 THEN $2 ELSE $3 END $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION \\"if\\"(boolean, numeric, numeric) RETURNS numeric AS $$ SELECT CASE WHEN $1 THEN $2 ELSE $3 END $$ LANGUAGE SQL IMMUTABLE",',
+    '',
+    '        "CREATE OR REPLACE FUNCTION curdate() RETURNS date AS $$ SELECT CURRENT_DATE $$ LANGUAGE SQL STABLE",',
+    '        "CREATE OR REPLACE FUNCTION curtime() RETURNS time AS $$ SELECT CURRENT_TIME::time $$ LANGUAGE SQL STABLE",',
+    '        "CREATE OR REPLACE FUNCTION pow(double precision, double precision) RETURNS double precision AS $$ SELECT POWER($1, $2) $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION rand() RETURNS double precision AS $$ SELECT random() $$ LANGUAGE SQL VOLATILE",',
+    '',
+    '        "CREATE OR REPLACE FUNCTION year(text) RETURNS integer AS $$ SELECT EXTRACT(YEAR FROM $1::timestamp)::integer $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION month(text) RETURNS integer AS $$ SELECT EXTRACT(MONTH FROM $1::timestamp)::integer $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION day(text) RETURNS integer AS $$ SELECT EXTRACT(DAY FROM $1::timestamp)::integer $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION monthname(text) RETURNS text AS $$ SELECT TRIM(TO_CHAR($1::timestamp, \'FMMonth\')) $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION datediff(text, text) RETURNS integer AS $$ SELECT ($1::date - $2::date)::integer $$ LANGUAGE SQL IMMUTABLE",',
+    '',
+    '        "CREATE OR REPLACE FUNCTION locate(text, text) RETURNS integer AS $$ SELECT POSITION($1 IN $2)::integer $$ LANGUAGE SQL IMMUTABLE",',
+    '        "CREATE OR REPLACE FUNCTION locate(text, text, integer) RETURNS integer AS $$',
+    '            SELECT CASE WHEN POSITION($1 IN substr($2, $3)) = 0 THEN 0',
+    '                        ELSE POSITION($1 IN substr($2, $3)) + $3 - 1 END',
+    '        $$ LANGUAGE SQL IMMUTABLE",',
+    '',
+    '        // LEFT(), RIGHT(), REPEAT(), CONCAT(), CONCAT_WS() and NOW() are all',
+    '        // already native Postgres functions with matching MySQL semantics, so',
+    '        // they need no shim here \u2014 they just work.',
+    '',
+    '        "CREATE OR REPLACE FUNCTION date_format(text, text) RETURNS text AS $$',
+    '        DECLARE',
+    '            ts timestamp := $1::timestamp;',
+    '            fmt text := $2;',
+    '            out_str text := \'\';',
+    '            i int := 1;',
+    '            len int := length(fmt);',
+    '            tok text;',
+    '        BEGIN',
+    '            IF $1 IS NULL THEN RETURN NULL; END IF;',
+    '            WHILE i <= len LOOP',
+    '                IF substr(fmt, i, 1) = \'%\' AND i < len THEN',
+    '                    tok := substr(fmt, i, 2);',
+    '                    out_str := out_str || CASE tok',
+    '                        WHEN \'%Y\' THEN to_char(ts, \'YYYY\')',
+    '                        WHEN \'%y\' THEN to_char(ts, \'YY\')',
+    '                        WHEN \'%m\' THEN to_char(ts, \'MM\')',
+    '                        WHEN \'%c\' THEN to_char(ts, \'FMMM\')',
+    '                        WHEN \'%d\' THEN to_char(ts, \'DD\')',
+    '                        WHEN \'%e\' THEN to_char(ts, \'FMDD\')',
+    '                        WHEN \'%H\' THEN to_char(ts, \'HH24\')',
+    '                        WHEN \'%i\' THEN to_char(ts, \'MI\')',
+    '                        WHEN \'%s\' THEN to_char(ts, \'SS\')',
+    '                        WHEN \'%M\' THEN trim(to_char(ts, \'FMMonth\'))',
+    '                        WHEN \'%b\' THEN to_char(ts, \'Mon\')',
+    '                        WHEN \'%W\' THEN trim(to_char(ts, \'FMDay\'))',
+    '                        WHEN \'%a\' THEN to_char(ts, \'Dy\')',
+    '                        WHEN \'%p\' THEN to_char(ts, \'AM\')',
+    '                        ELSE substr(tok, 2, 1)',
+    '                    END;',
+    '                    i := i + 2;',
+    '                ELSE',
+    '                    out_str := out_str || substr(fmt, i, 1);',
+    '                    i := i + 1;',
+    '                END IF;',
+    '            END LOOP;',
+    '            RETURN out_str;',
+    '        END;',
+    '        $$ LANGUAGE plpgsql IMMUTABLE",',
+    '    ];',
+    '    foreach ($statements as $stmt) {',
+    '        try {',
+    '            $db->exec($stmt);',
+    '        } catch (Throwable $e) { /* best effort \u2014 native Postgres functions (NOW, CONCAT, LEFT, RIGHT, REPEAT...) still work without these */ }',
+    '    }',
     '}',
     '',
     '// Seed a small, MySQL-shaped store schema.',
@@ -245,7 +348,7 @@
     '// PGlite connection).',
     'function play_columns_sql($table) {',
     '    return "SELECT c.column_name AS name, c.data_type AS type, " .',
-    '        "CASE WHEN c.is_nullable = \'NO\' THEN 1 ELSE 0 END AS notnull, " .',
+    '        "CASE WHEN c.is_nullable = \'NO\' THEN 1 ELSE 0 END AS \\"notnull\\", " .',
     '        "CASE WHEN pk.column_name IS NOT NULL THEN 1 ELSE 0 END AS pk, " .',
     '        "c.column_default AS dflt_value " .',
     '        "FROM information_schema.columns c " .',
@@ -263,13 +366,25 @@
     '    }',
     '    if (preg_match("/^(?:describe|desc|show\\\\s+columns\\\\s+from)\\\\s+`?([A-Za-z0-9_]+)`?/i", $t, $m)) {',
     '        $cols = play_columns_sql($m[1]);',
-    '        return "SELECT name AS \\"Field\\", type AS \\"Type\\", CASE WHEN notnull = 1 THEN \'NO\' ELSE \'YES\' END AS \\"Null\\", CASE WHEN pk = 1 THEN \'PRI\' ELSE \'\' END AS \\"Key\\", dflt_value AS \\"Default\\" FROM (" . $cols . ") t";',
+    '        return "SELECT name AS \\"Field\\", type AS \\"Type\\", CASE WHEN \\"notnull\\" = 1 THEN \'NO\' ELSE \'YES\' END AS \\"Null\\", CASE WHEN pk = 1 THEN \'PRI\' ELSE \'\' END AS \\"Key\\", dflt_value AS \\"Default\\" FROM (" . $cols . ") t";',
     '    }',
     '    if (preg_match("/^create\\\\s+table/i", $t)) {',
-    '        $t = preg_replace("/\\\\s+AUTO_INCREMENT\\\\s*(=\\\\s*\\\\d+)?/i", " ", $t);',
+    '        // AUTO_INCREMENT has no Postgres keyword equivalent \\u2014 the closest is an',
+    '        // identity column, so translate it into one instead of just deleting it',
+    '        // (deleting it left the column with no way to auto-generate a value at',
+    '        // all, so any INSERT that didn\'t specify that column would fail).',
+    '        $t = preg_replace("/\\\\s+AUTO_INCREMENT\\\\s*(=\\\\s*\\\\d+)?/i", " GENERATED BY DEFAULT AS IDENTITY", $t);',
     '        $t = preg_replace("/\\\\s+(ENGINE|DEFAULT\\\\s+CHARSET|CHARACTER\\\\s+SET|COLLATE)\\\\s*=?\\\\s*[A-Za-z0-9_]+/i", " ", $t);',
     '        $t = preg_replace("/\\\\bUNSIGNED\\\\b/i", " ", $t);',
     '        $t = preg_replace("/\\\\bINT\\\\s*\\\\(\\\\s*\\\\d+\\\\s*\\\\)/i", "INTEGER", $t);',
+    '        // MySQL types Postgres does not have: DATETIME (-> TIMESTAMP), and the',
+    '        // narrower integer widths (-> their closest Postgres equivalent). Any',
+    '        // display-width argument on those, e.g. TINYINT(1), is meaningless in',
+    '        // Postgres and gets dropped along the way.',
+    '        $t = preg_replace("/\\\\bDATETIME\\\\b/i", "TIMESTAMP", $t);',
+    '        $t = preg_replace("/\\\\bTINYINT\\\\s*(\\\\(\\\\s*\\\\d+\\\\s*\\\\))?/i", "SMALLINT", $t);',
+    '        $t = preg_replace("/\\\\bMEDIUMINT\\\\s*(\\\\(\\\\s*\\\\d+\\\\s*\\\\))?/i", "INTEGER", $t);',
+    '        $t = preg_replace("/\\\\b(SMALLINT|BIGINT)\\\\s*\\\\(\\\\s*\\\\d+\\\\s*\\\\)/i", "$1", $t);',
     '    }',
     '    return $t;',
     '}',
@@ -358,6 +473,7 @@
   // ---- Sample queries ----
   var SAMPLES = [
     {
+      group: 'Basics',
       name: 'Start here — browse a table',
       code: [
         '-- Every row and column in the customers table.',
@@ -366,6 +482,7 @@
       ].join('\n')
     },
     {
+      group: 'Basics',
       name: 'Pick columns + WHERE filter',
       code: [
         '-- Only the columns you need, only the rows that match.',
@@ -375,6 +492,7 @@
       ].join('\n')
     },
     {
+      group: 'Basics',
       name: 'ORDER BY + LIMIT (top 5)',
       code: [
         '-- The 5 most expensive products, priciest first.',
@@ -385,6 +503,7 @@
       ].join('\n')
     },
     {
+      group: 'Basics',
       name: 'LIKE, IN and BETWEEN',
       code: [
         '-- Pattern match: names containing "Mo"',
@@ -398,6 +517,7 @@
       ].join('\n')
     },
     {
+      group: 'Aggregation & joins',
       name: 'Aggregates — COUNT, SUM, AVG',
       code: [
         '-- One row of summary numbers over the whole orders table.',
@@ -412,6 +532,7 @@
       ].join('\n')
     },
     {
+      group: 'Aggregation & joins',
       name: 'GROUP BY + HAVING',
       code: [
         '-- Revenue per category, but only categories above 5,000.',
@@ -428,6 +549,7 @@
       ].join('\n')
     },
     {
+      group: 'Aggregation & joins',
       name: 'INNER JOIN two tables',
       code: [
         '-- Pull the customer name onto each order row.',
@@ -443,6 +565,7 @@
       ].join('\n')
     },
     {
+      group: 'Aggregation & joins',
       name: 'LEFT JOIN — include the zeroes',
       code: [
         '-- Every customer, even those who never ordered.',
@@ -458,6 +581,7 @@
       ].join('\n')
     },
     {
+      group: 'Aggregation & joins',
       name: 'Three-table join (order receipt)',
       code: [
         '-- Line items for one order, joined across three tables.',
@@ -476,7 +600,8 @@
       ].join('\n')
     },
     {
-      name: 'Subquery + CASE',
+      group: 'Functions & expressions',
+      name: 'Subquery + CASE + IF()',
       code: [
         '-- Compare each product against the average price.',
         'SELECT',
@@ -487,27 +612,204 @@
         '    WHEN price = (SELECT AVG(price) FROM products) THEN \'exactly average\'',
         '    ELSE \'below average\'',
         '  END AS price_band,',
-        '  CASE WHEN stock = 0 THEN \'out of stock\' ELSE \'in stock\' END AS availability',
+        '  IF(stock = 0, \'out of stock\', \'in stock\') AS availability',
         'FROM products',
         'ORDER BY price DESC;'
       ].join('\n')
     },
     {
+      group: 'Functions & expressions',
       name: 'Date functions (MySQL style)',
       code: [
         '-- YEAR, MONTHNAME and DATE_FORMAT work just like MySQL here.',
         'SELECT',
+        '  order_date,',
         '  DATE_FORMAT(order_date, \'%M %e, %Y\') AS pretty_date,',
-        '  YEAR(order_date)  AS yr,',
-        '  MONTHNAME(order_date) AS month_name,',
-        '  COUNT(*) AS orders,',
+        '  YEAR(order_date)      AS yr,',
+        '  MONTHNAME(order_date) AS month_name',
+        'FROM orders',
+        'ORDER BY order_date',
+        'LIMIT 5;',
+        '',
+        '-- Aggregating by month: group by the raw column (YEAR/MONTH give the',
+        '-- same grouping), then format the label from an aggregate of it.',
+        'SELECT',
+        '  DATE_FORMAT(MIN(order_date), \'%M %Y\') AS month,',
+        '  COUNT(*)   AS orders,',
         '  SUM(total) AS revenue',
         'FROM orders',
         'GROUP BY YEAR(order_date), MONTH(order_date)',
-        'ORDER BY yr, MONTH(order_date);'
+        'ORDER BY MIN(order_date);'
       ].join('\n')
     },
     {
+      group: 'Functions & expressions',
+      name: 'String functions',
+      code: [
+        '-- UPPER/LOWER, LENGTH, SUBSTRING, CONCAT, LOCATE, REPEAT and LEFT/RIGHT',
+        '-- all work just like MySQL here (most are native Postgres functions —',
+        '-- only LOCATE is one this playground adds for MySQL compatibility).',
+        'SELECT',
+        '  name,',
+        '  UPPER(name)                AS shout,',
+        '  LOWER(category)            AS category_lower,',
+        '  LENGTH(name)                AS name_length,',
+        '  LEFT(name, 3)                AS first_3,',
+        '  CONCAT(name, \' (\', category, \')\') AS label,',
+        '  LOCATE(\'o\', name)          AS first_o_at',
+        'FROM products',
+        'ORDER BY name',
+        'LIMIT 5;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'Window functions — ranking',
+      code: [
+        '-- RANK() OVER (PARTITION BY ... ORDER BY ...): rank each product',
+        '-- against only the other products in its own category.',
+        'SELECT',
+        '  category,',
+        '  name,',
+        '  price,',
+        '  RANK() OVER (PARTITION BY category ORDER BY price DESC) AS price_rank',
+        'FROM products',
+        'ORDER BY category, price_rank;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'Window functions — running total',
+      code: [
+        '-- SUM() OVER (ORDER BY ...) turns a plain aggregate into a running',
+        '-- total, without collapsing the rows the way GROUP BY would.',
+        'SELECT',
+        '  order_date,',
+        '  total,',
+        '  SUM(total) OVER (ORDER BY order_date, id) AS running_total',
+        'FROM orders',
+        'WHERE status = \'paid\'',
+        'ORDER BY order_date, id;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'Window functions — compare to previous row',
+      code: [
+        '-- LAG() reaches back to the previous row in the same ordering,',
+        '-- handy for period-over-period change without a self-join.',
+        'SELECT',
+        '  order_date,',
+        '  total,',
+        '  total - LAG(total) OVER (ORDER BY order_date, id) AS change_from_prev',
+        'FROM orders',
+        'WHERE status = \'paid\'',
+        'ORDER BY order_date, id;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'CTE (WITH) — named subqueries',
+      code: [
+        '-- WITH gives a subquery a name you can reference like a table,',
+        '-- so the main query reads top-to-bottom instead of nesting inward.',
+        'WITH category_totals AS (',
+        '  SELECT p.category, SUM(oi.quantity * oi.unit_price) AS revenue',
+        '  FROM order_items oi',
+        '  JOIN products p ON p.id = oi.product_id',
+        '  GROUP BY p.category',
+        ')',
+        'SELECT',
+        '  category,',
+        '  revenue,',
+        '  ROUND(100.0 * revenue / SUM(revenue) OVER (), 1) AS pct_of_total',
+        'FROM category_totals',
+        'ORDER BY revenue DESC;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'Multiple CTEs chained together',
+      code: [
+        '-- Each WITH clause can build on the one before it — useful for',
+        '-- breaking a big question into readable, testable steps.',
+        'WITH paid_orders AS (',
+        '  SELECT * FROM orders WHERE status = \'paid\'',
+        '),',
+        'customer_totals AS (',
+        '  SELECT customer_id, SUM(total) AS spent',
+        '  FROM paid_orders',
+        '  GROUP BY customer_id',
+        ')',
+        'SELECT c.name, ct.spent',
+        'FROM customer_totals ct',
+        'JOIN customers c ON c.id = ct.customer_id',
+        'ORDER BY ct.spent DESC;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'EXISTS / NOT EXISTS',
+      code: [
+        '-- EXISTS stops at the first match, which usually makes it faster',
+        '-- than an equivalent IN (...) subquery for "has at least one" checks.',
+        '-- Customers who have at least one paid order:',
+        'SELECT name FROM customers c',
+        'WHERE EXISTS (',
+        '  SELECT 1 FROM orders o WHERE o.customer_id = c.id AND o.status = \'paid\'',
+        ')',
+        'ORDER BY name;',
+        '',
+        '-- Customers who have never ordered anything at all:',
+        'SELECT name FROM customers c',
+        'WHERE NOT EXISTS (',
+        '  SELECT 1 FROM orders o WHERE o.customer_id = c.id',
+        ')',
+        'ORDER BY name;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'Correlated subquery in SELECT',
+      code: [
+        '-- A subquery that references the outer row (c.id) runs once per',
+        '-- outer row — handy for a per-row count without a GROUP BY/JOIN.',
+        'SELECT',
+        '  c.name,',
+        '  (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id) AS order_count',
+        'FROM customers c',
+        'ORDER BY order_count DESC, c.name;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'UNION — stack two result sets',
+      code: [
+        '-- UNION ALL stacks rows from different queries as long as the',
+        '-- column lists line up. Plain UNION would also drop duplicate rows.',
+        'SELECT name, \'out of stock product\' AS note FROM products WHERE stock = 0',
+        'UNION ALL',
+        'SELECT name, \'customer outside PH\' AS note FROM customers WHERE country != \'PH\'',
+        'ORDER BY note, name;'
+      ].join('\n')
+    },
+    {
+      group: 'Advanced SQL',
+      name: 'Self-join — pair up rows in the same table',
+      code: [
+        '-- Joining a table to itself, here to list every pair of products',
+        '-- that share a category without repeating a pair in both orders.',
+        'SELECT',
+        '  a.name AS product_a,',
+        '  b.name AS product_b,',
+        '  a.category',
+        'FROM products a',
+        'JOIN products b ON a.category = b.category AND a.id < b.id',
+        'ORDER BY a.category;'
+      ].join('\n')
+    },
+    {
+      group: 'Changing data',
       name: 'INSERT a row',
       code: [
         '-- Add a customer, then read it back.',
@@ -522,6 +824,7 @@
       ].join('\n')
     },
     {
+      group: 'Changing data',
       name: 'UPDATE and DELETE (safely)',
       code: [
         '-- Always run the SELECT first so you know exactly what you will change.',
@@ -540,9 +843,29 @@
       ].join('\n')
     },
     {
+      group: 'Changing data',
+      name: 'Transactions — BEGIN / ROLLBACK / COMMIT',
+      code: [
+        '-- Each statement here runs in order against the same connection, so',
+        '-- BEGIN/ROLLBACK behave exactly like a real MySQL/Postgres session:',
+        '-- everything in between is undone the moment ROLLBACK runs.',
+        'BEGIN;',
+        '',
+        'UPDATE products SET stock = stock - 1 WHERE id = 1;',
+        'SELECT id, name, stock FROM products WHERE id = 1;',
+        '',
+        '-- Change this to COMMIT to keep the change instead of undoing it.',
+        'ROLLBACK;',
+        '',
+        'SELECT id, name, stock FROM products WHERE id = 1;'
+      ].join('\n')
+    },
+    {
+      group: 'Changing data',
       name: 'CREATE TABLE + constraints',
       code: [
-        '-- MySQL DDL. AUTO_INCREMENT and ENGINE are accepted and ignored here.',
+        '-- MySQL DDL. AUTO_INCREMENT, ENGINE, DATETIME and narrower integer',
+        '-- types (TINYINT, MEDIUMINT, ...) are all accepted and translated here.',
         'CREATE TABLE IF NOT EXISTS reviews (',
         '  id         INTEGER PRIMARY KEY AUTO_INCREMENT,',
         '  product_id INT NOT NULL,',
@@ -562,6 +885,7 @@
       ].join('\n')
     },
     {
+      group: 'Schema',
       name: 'Inspect the schema',
       code: [
         '-- Familiar MySQL introspection commands.',
@@ -590,6 +914,16 @@
   function updateCharCount() {
     if (charCount) charCount.textContent = editor.value.length + ' chars';
   }
+  function updateLineNumbers() {
+    if (!lineGutter) return;
+    var lineCount = editor.value.split('\n').length;
+    var out = '';
+    for (var i = 1; i <= lineCount; i++) { out += i + '\n'; }
+    lineGutter.textContent = out;
+  }
+  function syncGutterScroll() {
+    if (lineGutter) lineGutter.scrollTop = editor.scrollTop;
+  }
   function setDirty(isDirty) {
     if (dirtyLabel) dirtyLabel.textContent = isDirty ? 'Unsaved — local only' : 'Local only';
   }
@@ -616,7 +950,7 @@
     (payload.results || []).forEach(function (r) {
       html += '<section class="sql-result sql-result-' + r.kind + '">';
       if (r.sql) {
-        html += '<header class="sql-result-head"><code>' + esc(r.sql.length > 160 ? r.sql.slice(0, 160) + '…' : r.sql) + '</code>';
+        html += '<header class="sql-result-head"><code>' + esc(r.sql) + '</code>';
         if (r.ms !== undefined) html += '<span class="sql-ms">' + r.ms + ' ms</span>';
         html += '</header>';
       }
@@ -653,6 +987,7 @@
     });
     resultsEl.innerHTML = html || '<div class="sql-placeholder">Nothing to show.</div>';
     resultsEl.scrollTop = 0;
+    resultsEl.scrollLeft = 0;
     renderSchema(payload.schema || []);
   }
 
@@ -798,6 +1133,9 @@
         renderResults(parsed);
         var bad = (parsed.results || []).some(function (r) { return r.kind === 'error'; });
         if (window.toast) window.toast(bad ? 'Query finished with an error' : 'Query ran successfully');
+        /* Same rule as every other action: only a query that ran cleanly and
+           hasn't already been rewarded earns XP (flat, once per distinct query). */
+        if (!bad && !reset && window.awardOnce) window.awardOnce('run-sql', sql, 'Ran SQL query');
       }
     } catch (err) {
       console.error('[sql-playground] query failed:', err);
@@ -818,23 +1156,30 @@
   // ---- Wiring ----
   function populateSamples() {
     if (!sampleSelect) return;
+    var groups = {};
+    var order = [];
     SAMPLES.forEach(function (s, i) {
+      var g = s.group || 'Samples';
+      if (!groups[g]) { groups[g] = document.createElement('optgroup'); groups[g].label = g; order.push(g); }
       var opt = document.createElement('option');
       opt.value = String(i);
       opt.textContent = s.name;
-      sampleSelect.appendChild(opt);
+      groups[g].appendChild(opt);
     });
+    order.forEach(function (g) { sampleSelect.appendChild(groups[g]); });
     sampleSelect.addEventListener('change', function () {
       var i = parseInt(sampleSelect.value, 10);
       if (isNaN(i) || !SAMPLES[i]) return;
       editor.value = SAMPLES[i].code;
       updateCharCount();
+      updateLineNumbers();
       setDirty(false);
       saveDraft();
     });
   }
 
-  editor.addEventListener('input', function () { updateCharCount(); setDirty(true); saveDraft(); });
+  editor.addEventListener('input', function () { updateCharCount(); updateLineNumbers(); setDirty(true); saveDraft(); });
+  editor.addEventListener('scroll', syncGutterScroll);
 
   // Ctrl/Cmd + Enter runs, like every SQL client.
   editor.addEventListener('keydown', function (e) {
@@ -847,6 +1192,7 @@
     var i = sampleSelect ? parseInt(sampleSelect.value, 10) : 0;
     editor.value = SAMPLES[isNaN(i) ? 0 : i].code;
     updateCharCount();
+    updateLineNumbers();
     setDirty(false);
     saveDraft();
   });
@@ -862,8 +1208,15 @@
   populateSamples();
   if (!loadDraft()) { editor.value = SAMPLES[0].code; }
   updateCharCount();
+  updateLineNumbers();
   setDirty(false);
   clearResults();
   if (resetDbBtn) resetDbBtn.disabled = true;
-  loadEngine();
+
+  // The combined Playground page loads this engine only when SQL is first used.
+  if (window.ADEV_LAZY_ENGINES) {
+    document.addEventListener('adev:start-sql', function () { loadEngine(); }, { once: true });
+  } else {
+    loadEngine();
+  }
 })();

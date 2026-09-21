@@ -1,5 +1,5 @@
 /**
- * Lightweight client-side i18n for A-DevTools chrome + page headers.
+ * Lightweight client-side i18n for A-Code Playground chrome + page headers.
  * Elements opt in with data-i18n="key" (textContent), data-i18n-title="key"
  * (title + aria-label) or data-i18n-placeholder="key" (input placeholder).
  * Selected language persists in localStorage and is applied on load.
@@ -17,17 +17,21 @@
 
   var DICT = {
     en: {
-      'nav.dashboard': 'Dashboard', 'nav.code': 'Code Playground', 'nav.php': 'PHP Playground', 'nav.components': 'UI Components',
+      'nav.dashboard': 'Dashboard', 'nav.playgrounds': 'Playgrounds', 'nav.code': 'Code Playground', 'nav.php': 'PHP Playground', 'nav.components': 'UI Components',
       'nav.snippets': 'Snippets', 'nav.projects': 'Projects', 'nav.notes': 'Notes',
       'nav.settings': 'Settings', 'nav.ui-guide': 'UI/UX Guide',
+      'nav.playground': 'Combined Playground', 'playground.eyebrow': 'LEARN · BUILD · RUN', 'playground.title': 'Combined Playground',
+      'playground.subtitle': 'One editor for HTML, CSS, JavaScript, PHP and SQL. Pick a language, write or load a sample, then press Run.',
+      'nav.php-sample': 'PHP Sample', 'phpsample.eyebrow': 'PHP LIBRARY', 'phpsample.title': 'PHP Sample',
+      'phpsample.subtitle': 'Basic PHP by category, plus CRUD with PDO. See the output, copy the code, or run it in the PHP Playground.',
       'side.workspace': 'WORKSPACE', 'side.saved': 'SAVED', 'side.savedSnippets': 'Saved Snippets', 'side.savedComponents': 'Saved Components', 'side.quickTools': 'QUICK TOOLS',
-      'qt.commandPalette': 'Command Palette', 'qt.newProject': 'New Project', 'qt.guidedTour': 'Guided Tour',
+      'qt.newProject': 'New Project', 'qt.guidedTour': 'Guided Tour',
       'side.localWorkspace': 'Local workspace',
       'topbar.searchPlaceholder': 'Search projects, snippets, notes...',
       'topbar.sidebarToggle': 'Toggle sidebar', 'topbar.search': 'Search',
       'topbar.theme': 'Toggle dark mode', 'topbar.help': 'Help & guided tour',
       'topbar.activity': 'View recent activity', 'topbar.logout': 'Log out',
-      'lang.picker': 'Change language', 'pwa.install': 'Install App', 'pwa.installTitle': 'Install A-DevTools as an app',
+      'lang.picker': 'Change language', 'pwa.install': 'Install App', 'pwa.installTitle': 'Install A-Code Playground as an app',
       'pwa.apkTitle': 'Download Android APK',
       'common.newProject': 'New Project', 'common.addNote': 'Add Note',
       'stat.projects': 'Projects', 'stat.projectsDesc': 'saved locally',
@@ -71,7 +75,7 @@
       'settings.importBackup': 'Import backup file',
       
       'auth.login': 'Log in', 'auth.joinCommunity': 'Join Community', 'auth.joinCommunityLower': 'Join the community',
-      'auth.joinTitle': 'Join the A-DevTools Community', 'auth.joinSubtitle': 'Create a free account to sync your workspace to this computer and pick up where you left off.',
+      'auth.joinTitle': 'Join the A-Code Playground Community', 'auth.joinSubtitle': 'Create a free account to sync your workspace to this computer and pick up where you left off.',
       'auth.name': 'Name', 'auth.email': 'Email', 'auth.password': 'Password', 'auth.passwordPlaceholder': 'At least 6 characters',
       'auth.confirmPassword': 'Confirm password', 'auth.confirmPasswordPlaceholder': 'Re-enter your password',
       'auth.createAccount': 'Create account', 'auth.alreadyMember': 'Already a member?',
@@ -101,7 +105,7 @@
       'landing.signupSubtitle': 'Create a free account and your workspace syncs to this computer automatically.',
       'landing.signUp': 'Sign Up', 'landing.alreadyHaveAccount': 'Already have an account?', 'landing.signInNow': 'sign in now!',
       'landing.welcomeBackTag': 'WELCOME BACK', 'landing.signInTitle': 'Sign In',
-      'landing.signInSubtitle': 'Log in to A-DevTools to keep working on your projects.',
+      'landing.signInSubtitle': 'Log in to A-Code Playground to keep working on your projects.',
       'landing.signIn': 'Sign In', 'landing.noAccount': "Don't have an account?", 'landing.signUpNow': 'sign up now!',
       'landing.featCodeDesc': 'Write and preview HTML, CSS and JavaScript in a live sandbox.',
       'landing.featSnippetsDesc': 'Save, search and reuse the components you build most often.',
@@ -114,17 +118,17 @@
       'side.workspace2': 'Workspace'
     },
     es: {
-      'nav.dashboard': 'Panel', 'nav.code': 'Zona de código', 'nav.php': 'Zona de PHP', 'nav.components': 'Componentes UI',
+      'nav.dashboard': 'Panel', 'nav.playgrounds': 'Zonas de práctica', 'nav.code': 'Zona de código', 'nav.php': 'Zona de PHP', 'nav.components': 'Componentes UI',
       'nav.snippets': 'Fragmentos', 'nav.projects': 'Proyectos', 'nav.notes': 'Notas',
       'nav.settings': 'Ajustes', 'nav.ui-guide': 'Guía UI/UX',
       'side.workspace': 'ESPACIO DE TRABAJO', 'side.saved': 'GUARDADOS', 'side.savedSnippets': 'Fragmentos guardados', 'side.savedComponents': 'Componentes guardados', 'side.quickTools': 'HERRAMIENTAS RÁPIDAS',
-      'qt.commandPalette': 'Paleta de comandos', 'qt.newProject': 'Nuevo proyecto', 'qt.guidedTour': 'Recorrido guiado',
+      'qt.newProject': 'Nuevo proyecto', 'qt.guidedTour': 'Recorrido guiado',
       'side.localWorkspace': 'Espacio de trabajo local',
       'topbar.searchPlaceholder': 'Buscar proyectos, fragmentos, notas...',
       'topbar.sidebarToggle': 'Mostrar/ocultar barra lateral', 'topbar.search': 'Buscar',
       'topbar.theme': 'Cambiar modo oscuro', 'topbar.help': 'Ayuda y recorrido guiado',
       'topbar.activity': 'Ver actividad reciente', 'topbar.logout': 'Cerrar sesión',
-      'lang.picker': 'Cambiar idioma', 'pwa.install': 'Instalar app', 'pwa.installTitle': 'Instalar A-DevTools como app',
+      'lang.picker': 'Cambiar idioma', 'pwa.install': 'Instalar app', 'pwa.installTitle': 'Instalar A-Code Playground como app',
       'pwa.apkTitle': 'Descargar APK de Android',
       'common.newProject': 'Nuevo proyecto', 'common.addNote': 'Añadir nota',
       'stat.projects': 'Proyectos', 'stat.projectsDesc': 'guardados localmente',
@@ -168,7 +172,7 @@
       'settings.importBackup': 'Importar archivo de copia',
       
       'auth.login': 'Iniciar sesión', 'auth.joinCommunity': 'Únete a la comunidad', 'auth.joinCommunityLower': 'Únete a la comunidad',
-      'auth.joinTitle': 'Únete a la comunidad de A-DevTools', 'auth.joinSubtitle': 'Crea una cuenta gratuita para sincronizar tu espacio de trabajo con este equipo y continuar donde lo dejaste.',
+      'auth.joinTitle': 'Únete a la comunidad de A-Code Playground', 'auth.joinSubtitle': 'Crea una cuenta gratuita para sincronizar tu espacio de trabajo con este equipo y continuar donde lo dejaste.',
       'auth.name': 'Nombre', 'auth.email': 'Correo electrónico', 'auth.password': 'Contraseña', 'auth.passwordPlaceholder': 'Al menos 6 caracteres',
       'auth.confirmPassword': 'Confirmar contraseña', 'auth.confirmPasswordPlaceholder': 'Vuelve a escribir tu contraseña',
       'auth.createAccount': 'Crear cuenta', 'auth.alreadyMember': '¿Ya eres miembro?',
@@ -194,7 +198,7 @@
       'landing.signupSubtitle': 'Crea una cuenta gratuita y tu espacio de trabajo se sincroniza automáticamente con este equipo.',
       'landing.signUp': 'Registrarse', 'landing.alreadyHaveAccount': '¿Ya tienes una cuenta?', 'landing.signInNow': '¡inicia sesión ahora!',
       'landing.welcomeBackTag': 'BIENVENIDO DE NUEVO', 'landing.signInTitle': 'Iniciar sesión',
-      'landing.signInSubtitle': 'Inicia sesión en A-DevTools para seguir con tus proyectos.',
+      'landing.signInSubtitle': 'Inicia sesión en A-Code Playground para seguir con tus proyectos.',
       'landing.signIn': 'Iniciar sesión', 'landing.noAccount': '¿No tienes una cuenta?', 'landing.signUpNow': '¡regístrate ahora!',
       'landing.featCodeDesc': 'Escribe y previsualiza HTML, CSS y JavaScript en una zona de pruebas en vivo.',
       'landing.featSnippetsDesc': 'Guarda, busca y reutiliza los componentes que más usas.',
@@ -207,17 +211,17 @@
       'side.workspace2': 'Espacio de trabajo'
     },
     fr: {
-      'nav.dashboard': 'Tableau de bord', 'nav.code': 'Bac à code', 'nav.php': 'Bac à PHP', 'nav.components': 'Composants UI',
+      'nav.dashboard': 'Tableau de bord', 'nav.playgrounds': 'Bacs à sable', 'nav.code': 'Bac à code', 'nav.php': 'Bac à PHP', 'nav.components': 'Composants UI',
       'nav.snippets': 'Extraits', 'nav.projects': 'Projets', 'nav.notes': 'Notes',
       'nav.settings': 'Paramètres', 'nav.ui-guide': 'Guide UI/UX',
       'side.workspace': 'ESPACE DE TRAVAIL', 'side.saved': 'ENREGISTRÉS', 'side.savedSnippets': 'Extraits enregistrés', 'side.savedComponents': 'Composants enregistrés', 'side.quickTools': 'OUTILS RAPIDES',
-      'qt.commandPalette': 'Palette de commandes', 'qt.newProject': 'Nouveau projet', 'qt.guidedTour': 'Visite guidée',
+      'qt.newProject': 'Nouveau projet', 'qt.guidedTour': 'Visite guidée',
       'side.localWorkspace': 'Espace de travail local',
       'topbar.searchPlaceholder': 'Rechercher projets, extraits, notes...',
       'topbar.sidebarToggle': 'Afficher/masquer la barre latérale', 'topbar.search': 'Rechercher',
       'topbar.theme': 'Basculer le mode sombre', 'topbar.help': 'Aide et visite guidée',
       'topbar.activity': 'Voir l\'activité récente', 'topbar.logout': 'Se déconnecter',
-      'lang.picker': 'Changer de langue', 'pwa.install': 'Installer l\'app', 'pwa.installTitle': 'Installer A-DevTools comme application',
+      'lang.picker': 'Changer de langue', 'pwa.install': 'Installer l\'app', 'pwa.installTitle': 'Installer A-Code Playground comme application',
       'pwa.apkTitle': 'Télécharger l\'APK Android',
       'common.newProject': 'Nouveau projet', 'common.addNote': 'Ajouter une note',
       'stat.projects': 'Projets', 'stat.projectsDesc': 'enregistrés localement',
@@ -261,7 +265,7 @@
       'settings.importBackup': 'Importer un fichier de sauvegarde',
       
       'auth.login': 'Se connecter', 'auth.joinCommunity': 'Rejoindre la communauté', 'auth.joinCommunityLower': 'Rejoindre la communauté',
-      'auth.joinTitle': 'Rejoignez la communauté A-DevTools', 'auth.joinSubtitle': 'Créez un compte gratuit pour synchroniser votre espace de travail avec cet ordinateur et reprendre où vous en étiez.',
+      'auth.joinTitle': 'Rejoignez la communauté A-Code Playground', 'auth.joinSubtitle': 'Créez un compte gratuit pour synchroniser votre espace de travail avec cet ordinateur et reprendre où vous en étiez.',
       'auth.name': 'Nom', 'auth.email': 'E-mail', 'auth.password': 'Mot de passe', 'auth.passwordPlaceholder': 'Au moins 6 caractères',
       'auth.confirmPassword': 'Confirmer le mot de passe', 'auth.confirmPasswordPlaceholder': 'Ressaisissez votre mot de passe',
       'auth.createAccount': 'Créer un compte', 'auth.alreadyMember': 'Déjà membre ?',
@@ -287,7 +291,7 @@
       'landing.signupSubtitle': 'Créez un compte gratuit et votre espace de travail se synchronise automatiquement avec cet ordinateur.',
       'landing.signUp': "S'inscrire", 'landing.alreadyHaveAccount': 'Vous avez déjà un compte ?', 'landing.signInNow': 'connectez-vous maintenant !',
       'landing.welcomeBackTag': 'CONTENT DE VOUS REVOIR', 'landing.signInTitle': 'Se connecter',
-      'landing.signInSubtitle': 'Connectez-vous à A-DevTools pour continuer vos projets.',
+      'landing.signInSubtitle': 'Connectez-vous à A-Code Playground pour continuer vos projets.',
       'landing.signIn': 'Se connecter', 'landing.noAccount': "Vous n'avez pas de compte ?", 'landing.signUpNow': "inscrivez-vous maintenant !",
       'landing.featCodeDesc': 'Écrivez et prévisualisez HTML, CSS et JavaScript dans un bac à sable en direct.',
       'landing.featSnippetsDesc': 'Enregistrez, recherchez et réutilisez les composants que vous créez le plus souvent.',
@@ -300,17 +304,17 @@
       'side.workspace2': 'Espace de travail'
     },
     de: {
-      'nav.dashboard': 'Übersicht', 'nav.code': 'Code-Spielwiese', 'nav.php': 'PHP-Spielwiese', 'nav.components': 'UI-Komponenten',
+      'nav.dashboard': 'Übersicht', 'nav.playgrounds': 'Spielwiesen', 'nav.code': 'Code-Spielwiese', 'nav.php': 'PHP-Spielwiese', 'nav.components': 'UI-Komponenten',
       'nav.snippets': 'Snippets', 'nav.projects': 'Projekte', 'nav.notes': 'Notizen',
       'nav.settings': 'Einstellungen', 'nav.ui-guide': 'UI/UX-Leitfaden',
       'side.workspace': 'ARBEITSBEREICH', 'side.saved': 'GESPEICHERT', 'side.savedSnippets': 'Gespeicherte Snippets', 'side.savedComponents': 'Gespeicherte Komponenten', 'side.quickTools': 'SCHNELLZUGRIFF',
-      'qt.commandPalette': 'Befehlspalette', 'qt.newProject': 'Neues Projekt', 'qt.guidedTour': 'Geführte Tour',
+      'qt.newProject': 'Neues Projekt', 'qt.guidedTour': 'Geführte Tour',
       'side.localWorkspace': 'Lokaler Arbeitsbereich',
       'topbar.searchPlaceholder': 'Projekte, Snippets, Notizen suchen...',
       'topbar.sidebarToggle': 'Seitenleiste umschalten', 'topbar.search': 'Suchen',
       'topbar.theme': 'Dunkelmodus umschalten', 'topbar.help': 'Hilfe & geführte Tour',
       'topbar.activity': 'Letzte Aktivität ansehen', 'topbar.logout': 'Abmelden',
-      'lang.picker': 'Sprache ändern', 'pwa.install': 'App installieren', 'pwa.installTitle': 'A-DevTools als App installieren',
+      'lang.picker': 'Sprache ändern', 'pwa.install': 'App installieren', 'pwa.installTitle': 'A-Code Playground als App installieren',
       'pwa.apkTitle': 'Android-APK herunterladen',
       'common.newProject': 'Neues Projekt', 'common.addNote': 'Notiz hinzufügen',
       'stat.projects': 'Projekte', 'stat.projectsDesc': 'lokal gespeichert',
@@ -354,7 +358,7 @@
       'settings.importBackup': 'Sicherungsdatei importieren',
       
       'auth.login': 'Anmelden', 'auth.joinCommunity': 'Community beitreten', 'auth.joinCommunityLower': 'Der Community beitreten',
-      'auth.joinTitle': 'Tritt der A-DevTools-Community bei', 'auth.joinSubtitle': 'Erstelle ein kostenloses Konto, um deinen Arbeitsbereich mit diesem Computer zu synchronisieren und dort weiterzumachen, wo du aufgehört hast.',
+      'auth.joinTitle': 'Tritt der A-Code Playground-Community bei', 'auth.joinSubtitle': 'Erstelle ein kostenloses Konto, um deinen Arbeitsbereich mit diesem Computer zu synchronisieren und dort weiterzumachen, wo du aufgehört hast.',
       'auth.name': 'Name', 'auth.email': 'E-Mail', 'auth.password': 'Passwort', 'auth.passwordPlaceholder': 'Mindestens 6 Zeichen',
       'auth.confirmPassword': 'Passwort bestätigen', 'auth.confirmPasswordPlaceholder': 'Passwort erneut eingeben',
       'auth.createAccount': 'Konto erstellen', 'auth.alreadyMember': 'Schon Mitglied?',
@@ -380,7 +384,7 @@
       'landing.signupSubtitle': 'Erstelle ein kostenloses Konto und dein Arbeitsbereich synchronisiert sich automatisch mit diesem Computer.',
       'landing.signUp': 'Registrieren', 'landing.alreadyHaveAccount': 'Schon ein Konto?', 'landing.signInNow': 'jetzt anmelden!',
       'landing.welcomeBackTag': 'WILLKOMMEN ZURÜCK', 'landing.signInTitle': 'Anmelden',
-      'landing.signInSubtitle': 'Melde dich bei A-DevTools an, um an deinen Projekten weiterzuarbeiten.',
+      'landing.signInSubtitle': 'Melde dich bei A-Code Playground an, um an deinen Projekten weiterzuarbeiten.',
       'landing.signIn': 'Anmelden', 'landing.noAccount': 'Noch kein Konto?', 'landing.signUpNow': 'jetzt registrieren!',
       'landing.featCodeDesc': 'Schreibe und sieh dir HTML, CSS und JavaScript live an.',
       'landing.featSnippetsDesc': 'Speichere, suche und nutze deine am häufigsten verwendeten Komponenten erneut.',
@@ -393,17 +397,17 @@
       'side.workspace2': 'Arbeitsbereich'
     },
     tl: {
-      'nav.dashboard': 'Dashboard', 'nav.code': 'Code Playground', 'nav.php': 'PHP Playground', 'nav.components': 'Mga UI Component',
+      'nav.dashboard': 'Dashboard', 'nav.playgrounds': 'Mga Playground', 'nav.code': 'Code Playground', 'nav.php': 'PHP Playground', 'nav.components': 'Mga UI Component',
       'nav.snippets': 'Mga Snippet', 'nav.projects': 'Mga Proyekto', 'nav.notes': 'Mga Tala',
       'nav.settings': 'Mga Setting', 'nav.ui-guide': 'Gabay sa UI/UX',
       'side.workspace': 'WORKSPACE', 'side.saved': 'NA-SAVE', 'side.savedSnippets': 'Mga Na-save na Snippet', 'side.savedComponents': 'Mga Na-save na Component', 'side.quickTools': 'MABILIS NA GAMIT',
-      'qt.commandPalette': 'Command Palette', 'qt.newProject': 'Bagong Proyekto', 'qt.guidedTour': 'Gabay na Tour',
+      'qt.newProject': 'Bagong Proyekto', 'qt.guidedTour': 'Gabay na Tour',
       'side.localWorkspace': 'Lokal na workspace',
       'topbar.searchPlaceholder': 'Maghanap ng proyekto, snippet, tala...',
       'topbar.sidebarToggle': 'I-toggle ang sidebar', 'topbar.search': 'Maghanap',
       'topbar.theme': 'I-toggle ang dark mode', 'topbar.help': 'Tulong at gabay na tour',
       'topbar.activity': 'Tingnan ang kamakailang aktibidad', 'topbar.logout': 'Mag-log out',
-      'lang.picker': 'Palitan ang wika', 'pwa.install': 'I-install ang App', 'pwa.installTitle': 'I-install ang A-DevTools bilang app',
+      'lang.picker': 'Palitan ang wika', 'pwa.install': 'I-install ang App', 'pwa.installTitle': 'I-install ang A-Code Playground bilang app',
       'pwa.apkTitle': 'I-download ang Android APK',
       'common.newProject': 'Bagong Proyekto', 'common.addNote': 'Magdagdag ng Tala',
       'stat.projects': 'Mga Proyekto', 'stat.projectsDesc': 'naka-save nang lokal',
@@ -447,7 +451,7 @@
       'settings.importBackup': 'Mag-import ng backup file',
       
       'auth.login': 'Mag-log in', 'auth.joinCommunity': 'Sumali sa Komunidad', 'auth.joinCommunityLower': 'Sumali sa komunidad',
-      'auth.joinTitle': 'Sumali sa A-DevTools Community', 'auth.joinSubtitle': 'Gumawa ng libreng account para i-sync ang iyong workspace sa computer na ito at ipagpatuloy kung saan ka huminto.',
+      'auth.joinTitle': 'Sumali sa A-Code Playground Community', 'auth.joinSubtitle': 'Gumawa ng libreng account para i-sync ang iyong workspace sa computer na ito at ipagpatuloy kung saan ka huminto.',
       'auth.name': 'Pangalan', 'auth.email': 'Email', 'auth.password': 'Password', 'auth.passwordPlaceholder': 'Hindi bababa sa 6 na karakter',
       'auth.confirmPassword': 'Kumpirmahin ang password', 'auth.confirmPasswordPlaceholder': 'Muling i-type ang iyong password',
       'auth.createAccount': 'Gumawa ng account', 'auth.alreadyMember': 'Miyembro ka na?',
@@ -473,7 +477,7 @@
       'landing.signupSubtitle': 'Gumawa ng libreng account at awtomatikong mai-sync ang iyong workspace sa computer na ito.',
       'landing.signUp': 'Mag-sign Up', 'landing.alreadyHaveAccount': 'May account ka na ba?', 'landing.signInNow': 'mag-sign in na ngayon!',
       'landing.welcomeBackTag': 'MALIGAYANG PAGBABALIK', 'landing.signInTitle': 'Mag-sign In',
-      'landing.signInSubtitle': 'Mag-log in sa A-DevTools para ipagpatuloy ang iyong mga proyekto.',
+      'landing.signInSubtitle': 'Mag-log in sa A-Code Playground para ipagpatuloy ang iyong mga proyekto.',
       'landing.signIn': 'Mag-sign In', 'landing.noAccount': 'Wala ka pang account?', 'landing.signUpNow': 'mag-sign up na ngayon!',
       'landing.featCodeDesc': 'Sumulat at mag-preview ng HTML, CSS, at JavaScript sa live na sandbox.',
       'landing.featSnippetsDesc': 'I-save, hanapin, at muling gamitin ang mga bahaging madalas mong ginagawa.',
@@ -487,7 +491,7 @@
     }
   };
 
-  var STORAGE_KEY = 'adevtools_lang';
+  var STORAGE_KEY = 'acodeplayground_lang';
 
   function detectDefault() {
     var saved = localStorage.getItem(STORAGE_KEY);
@@ -540,7 +544,7 @@
     return dict[key] || DICT.en[key] || key;
   }
 
-  window.ADevToolsI18n = { setLanguage: setLanguage, languages: LANGS, current: detectDefault, t: t };
+  window.ACodePlaygroundI18n = { setLanguage: setLanguage, languages: LANGS, current: detectDefault, t: t };
 
   document.addEventListener('DOMContentLoaded', function () {
     apply(detectDefault());

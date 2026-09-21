@@ -1,11 +1,11 @@
 <?php
 /**
  * Community account endpoint — register / login / logout.
- * Accounts are stored in MySQL (see sql/a-devtools-schema.sql and config.php).
+ * Accounts are stored in MySQL (see sql/a-codeplayground-schema.sql and config.php).
  */
 require_once __DIR__ . '/core/security.php';
-adevtools_start_session();
-adevtools_security_headers();
+acodeplayground_start_session();
+acodeplayground_security_headers();
 header('Content-Type: application/json');
 require_once __DIR__ . '/core/auth-helpers.php';
 
@@ -136,7 +136,7 @@ try {
     }
 
 } catch (PDOException $e) {
-    respond(false, array('error' => 'Could not reach the database. Check config.php and make sure sql/a-devtools-schema.sql has been imported.'));
+    respond(false, array('error' => 'Could not reach the database. Check config.php and make sure sql/a-codeplayground-schema.sql has been imported.'));
 }
 
 respond(false, array('error' => 'Unknown action'));

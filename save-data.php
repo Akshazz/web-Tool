@@ -5,8 +5,8 @@
  * Projects/snippets/notes still live in the browser's localStorage as the
  * instant, offline working copy — but every create/update/delete is also
  * written here, into the `projects` / `snippets` / `notes` tables in the
- * `a_devtools` MySQL database, scoped to the logged-in community account
- * (see sql/a-devtools-schema.sql and config.php).
+ * `a_codeplayground` MySQL database, scoped to the logged-in community account
+ * (see sql/a-codeplayground-schema.sql and config.php).
  *
  * Downloadable / on-disk backups are still plain JSON snapshot files
  * (data/backups/ by default) — that part hasn't changed, since a portable
@@ -19,11 +19,12 @@
  * as a reference field — it does not gate access to anything server-side.
  */
 require_once __DIR__ . '/core/security.php';
-adevtools_start_session();
-adevtools_security_headers();
+acodeplayground_start_session();
+acodeplayground_security_headers();
 header('Content-Type: application/json');
 require_once __DIR__ . '/core/db.php';
 require_once __DIR__ . '/core/auth-helpers.php';
+require_once __DIR__ . '/core/paths.php';
 
 function respond($ok, $extra = array()) {
     echo json_encode(array_merge(array('ok' => $ok), $extra));
@@ -40,28 +41,23 @@ $userId = $user['id'];
 $configFile = __DIR__ . '/save-config.json';
 
 function resolveDefaultBackupsDir() {
-    /* The default save spot is a plain "A-DevTools" folder directly on the
-       C: drive's root — a fixed, easy-to-find path (C:\A-DevTools) rather
-       than nesting it inside Desktop, since Apache/XAMPP on Windows often
-       runs under a service account whose "current user" isn't the person
-       actually sitting at the machine, which makes the real per-user
-       Desktop path unreliable to detect from here — a root-level folder
-       is one click away in File Explorer regardless.
+    /* Fixed default save spot: C:\A-CodePlayground\BackupFiles — a dedicated
+       subfolder rather than dropping files straight into C:\A-CodePlayground,
+       so backup snapshots stay clearly labeled and separate from
+       anything else that folder might hold. Apache/XAMPP on Windows
+       often runs under a service account whose "current user" isn't the
+       person actually sitting at the machine, which makes the real
+       per-user Desktop path unreliable to detect from here — this
+       root-level folder is one click away in File Explorer regardless.
        If C: doesn't exist or isn't writable (a different OS, a locked-
-       down C:), fall back through the other local drive letters in
-       order — "any local disk" — and only fall back to a folder inside
-       the project itself as a last resort, so saving never breaks
-       outright on a non-Windows host. */
-    if (stripos(PHP_OS, 'WIN') === 0) {
-        foreach (range('C', 'Z') as $letter) {
-            $driveRoot = $letter . ':/';
-            if (!is_dir($driveRoot)) { continue; } // that drive letter doesn't exist here
-            $dir = $driveRoot . 'A-DevTools';
-            if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
-            if (is_dir($dir) && is_writable($dir)) { return $dir; }
-        }
+       down C:), fall back to a folder inside the project itself so saving
+       never breaks outright on a non-Windows host. */
+    if (stripos(PHP_OS, 'WIN') === 0 && is_dir('C:/')) {
+        $dir = 'C:/A-CodePlayground/BackupFiles';
+        if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
+        if (is_dir($dir) && is_writable($dir)) { return $dir; }
     }
-    // Non-Windows host, or every drive letter above failed.
+    // Non-Windows host, or C:\A-CodePlayground\BackupFiles isn't usable.
     $dir = __DIR__ . '/data/backups';
     if (!is_dir($dir)) { @mkdir($dir, 0775, true); }
     return $dir;
@@ -71,8 +67,7 @@ function readConfiguredBackupsDir($configFile, $default) {
     if (is_file($configFile)) {
         $cfg = json_decode((string)@file_get_contents($configFile), true);
         if (is_array($cfg) && !empty($cfg['dataDir'])) {
-            $dir = (string)$cfg['dataDir'];
-            return preg_match('#^([A-Za-z]:[\\\\/]|/)#', $dir) ? rtrim($dir, '\\/') : (__DIR__ . '/' . trim($dir, '\\/'));
+            return backup_resolve_dir((string)$cfg['dataDir'], __DIR__);
         }
     }
     return $default;
@@ -96,6 +91,45 @@ $columnMap = array(
 function safeId($id) {
     $id = preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$id);
     return $id === '' ? null : $id;
+}
+
+/** Flat XP per action — mirrors XP_ACTION in assets/js/app.js. */
+if (!defined('XP_PER_ACTION')) { define('XP_PER_ACTION', 2); }
+/* Anti-cheat limits for the award-points action below. Action XP only —
+   the once-a-day streak bonus has its own rules. */
+if (!defined('XP_DAILY_ACTION_CAP')) { define('XP_DAILY_ACTION_CAP', 60); } // max action XP per calendar day
+if (!defined('XP_BURST_LIMIT')) { define('XP_BURST_LIMIT', 10); }           // max awards per rolling 60 seconds
+
+/** What a client may claim an award for. Anything else is rejected. */
+function xpValidKinds() {
+    return array('project', 'snippet', 'note', 'delete', 'run-code', 'run-starter',
+                 'run-snippet', 'run-sql', 'copy-snippet', 'milestone');
+}
+
+/* Server-side twin of the browser's XP ledger. One row per (account,
+   action fingerprint); the primary key is what makes "same content
+   again" earn nothing even if the browser's localStorage is cleared or a
+   request is replayed by hand. Created on first use so it works even if
+   database/xp-ledger-migration.sql was never run. */
+function ensureXpLedger($pdo) {
+    static $done = false;
+    if ($done) { return; }
+    $pdo->exec(
+        "CREATE TABLE IF NOT EXISTS `xp_ledger` (
+            `user_id`    VARCHAR(32) NOT NULL,
+            `action_key` VARCHAR(96) NOT NULL,
+            `xp`         INT NOT NULL DEFAULT 0,
+            `created_at` DATETIME NOT NULL,
+            PRIMARY KEY (`user_id`, `action_key`),
+            KEY `idx_xp_ledger_user_time` (`user_id`, `created_at`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    );
+    $done = true;
+}
+
+/** Server clock the browser should use for "today" (never the device clock). */
+function serverClock() {
+    return array('now' => (int)round(microtime(true) * 1000), 'offset' => (int)date('Z'), 'today' => date('Y-m-d'));
 }
 
 /** Reads one account's row from the `points` table, or zeroed defaults if it doesn't have one yet. */
@@ -178,9 +212,10 @@ try {
         }
         respond(true, array(
             'writable'   => is_writable($backupsDir),
-            'path'       => str_replace('\\', '/', $backupsDir),
-            'default'    => str_replace('\\', '/', $defaultBackupsDir),
-            'isCustom'   => rtrim(str_replace('\\', '/', $backupsDir), '/') !== rtrim(str_replace('\\', '/', $defaultBackupsDir), '/'),
+            'path'       => backup_display_path($backupsDir),
+            'default'    => backup_display_path($defaultBackupsDir),
+            'isWindows'  => backup_is_windows_host(),
+            'isCustom'   => rtrim(backup_display_path($backupsDir), '/') !== rtrim(backup_display_path($defaultBackupsDir), '/'),
             'counts'     => $counts,
             'lastBackup' => $lastBackup,
         ));
@@ -188,7 +223,7 @@ try {
 
     // Read-only, same as 'status' above — no CSRF token needed.
     if ($action === 'get-points') {
-        respond(true, array('points' => fetchPointsRow($pdo, $userId)));
+        respond(true, array('points' => fetchPointsRow($pdo, $userId), 'clock' => serverClock()));
     }
 
     // Read-only leaderboard: the top 10 accounts by total XP, plus this
@@ -248,7 +283,7 @@ try {
             respond(false, array('error' => 'The backup folder does not exist yet.'));
         }
         if (!function_exists('exec')) {
-            respond(false, array('error' => 'Opening folders is disabled on this server (exec() is unavailable).', 'path' => str_replace('\\', '/', $backupsDir)));
+            respond(false, array('error' => 'Opening folders is disabled on this server (exec() is unavailable).', 'path' => backup_display_path($backupsDir)));
         }
 
         $ok = false;
@@ -271,26 +306,31 @@ try {
         }
 
         if ($ok) {
-            respond(true, array('path' => str_replace('\\', '/', $backupsDir)));
+            respond(true, array('path' => backup_display_path($backupsDir)));
         }
-        respond(false, array('error' => 'Could not open a file browser on this server.', 'path' => str_replace('\\', '/', $backupsDir)));
+        respond(false, array('error' => 'Could not open a file browser on this server.', 'path' => backup_display_path($backupsDir)));
     }
 
     if ($action === 'set-location') {
-        $newDir = isset($body['dataDir']) ? trim((string)$body['dataDir']) : '';
-        if ($newDir === '') {
-            @unlink($configFile);
-            respond(true, array('path' => str_replace('\\', '/', $defaultBackupsDir), 'isCustom' => false));
+        // Tidy + validate what was typed (quotes, slashes, "..", illegal
+        // characters...) before touching the filesystem. Blank = use default.
+        list($pathOk, $cleanDir, $pathError) = backup_validate_dir(isset($body['dataDir']) ? $body['dataDir'] : '');
+        if (!$pathOk) {
+            respond(false, array('error' => $pathError));
         }
-        $resolved = preg_match('#^([A-Za-z]:[\\\\/]|/)#', $newDir) ? rtrim($newDir, '\\/') : (__DIR__ . '/' . trim($newDir, '\\/'));
+        if ($cleanDir === '') {
+            @unlink($configFile);
+            respond(true, array('path' => backup_display_path($defaultBackupsDir), 'value' => '', 'isCustom' => false));
+        }
+        $resolved = backup_resolve_dir($cleanDir, __DIR__);
         if (!is_dir($resolved) && !@mkdir($resolved, 0775, true)) {
             respond(false, array('error' => 'Could not create or access that folder. Check the path and permissions.'));
         }
         if (!is_writable($resolved)) {
             respond(false, array('error' => 'That folder exists but is not writable.'));
         }
-        file_put_contents($configFile, json_encode(array('dataDir' => $newDir), JSON_PRETTY_PRINT));
-        respond(true, array('path' => str_replace('\\', '/', $resolved), 'isCustom' => true));
+        file_put_contents($configFile, json_encode(array('dataDir' => $cleanDir), JSON_PRETTY_PRINT));
+        respond(true, array('path' => backup_display_path($resolved), 'value' => backup_display_path($cleanDir), 'isCustom' => true));
     }
 
     if ($action === 'save-item') {
@@ -365,26 +405,65 @@ try {
 
     // Mirrors one XP award (running code, saving a snippet, a getting-started
     // milestone...) into the `points` table. The frontend already applied
-    // this to its local copy for instant feedback (see awardPoints() in
-    // assets/js/app.js) — this just keeps the account's row in sync so the
-    // rank isn't only ever known to this one browser.
+    // this to its local copy for instant feedback (see awardOnce() in
+    // assets/js/app.js) — but the SERVER decides whether it really counts,
+    // and answers with the account's true total so the browser can correct
+    // itself. Anti-cheat rules, all enforced here rather than trusted from
+    // the browser:
+    //   1. The amount is never taken from the request — it's always the
+    //      flat XP_PER_ACTION, and only for a whitelisted action kind.
+    //   2. Each (kind + content fingerprint) can be rewarded once per
+    //      account, ever (xp_ledger primary key) — so replaying a request,
+    //      clearing localStorage, renaming back and forth or recreating
+    //      identical content earns nothing.
+    //   3. Burst limit: at most XP_BURST_LIMIT awards per rolling minute.
+    //   4. Daily cap: at most XP_DAILY_ACTION_CAP action-XP per day.
     if ($action === 'award-points') {
-        $amount = isset($body['amount']) ? (int)$body['amount'] : 0;
-        // Clamped to the largest single award the UI ever hands out (the
-        // "completed the beginner journey" bonus is 20) with headroom, so a
-        // tampered request can't hand out an outsized chunk of a rank in
-        // one call.
-        $amount = max(-50, min(50, $amount));
-        if ($amount === 0) {
-            respond(true, array('points' => fetchPointsRow($pdo, $userId)));
+        $kind = isset($body['kind']) ? (string)$body['kind'] : '';
+        $key  = isset($body['key']) ? (string)$body['key'] : '';
+        if (!in_array($kind, xpValidKinds(), true) || !preg_match('/^[a-z0-9]{4,60}$/', $key)) {
+            respond(false, array('error' => 'Unknown XP action.', 'points' => fetchPointsRow($pdo, $userId)));
+        }
+        ensureXpLedger($pdo);
+
+        $actionKey  = $kind . ':' . $key;
+        $now        = date('Y-m-d H:i:s');
+        $dayStart   = date('Y-m-d 00:00:00');
+        $burstStart = date('Y-m-d H:i:s', time() - 60);
+
+        $pdo->beginTransaction();
+        // Ensure the row exists, then lock it so two simultaneous requests
+        // from one account are checked one after the other.
+        $pdo->prepare('INSERT IGNORE INTO `points` (user_id, total) VALUES (?, 0)')->execute(array($userId));
+        $lock = $pdo->prepare('SELECT total FROM `points` WHERE user_id = ? FOR UPDATE');
+        $lock->execute(array($userId));
+        $lock->fetchAll();
+
+        $burst = $pdo->prepare('SELECT COUNT(*) FROM `xp_ledger` WHERE user_id = ? AND created_at >= ?');
+        $burst->execute(array($userId, $burstStart));
+        if ((int)$burst->fetchColumn() >= XP_BURST_LIMIT) {
+            $pdo->commit();
+            respond(false, array('limited' => true, 'error' => 'Slow down — too many XP actions in a minute.', 'points' => fetchPointsRow($pdo, $userId)));
         }
 
-        $pdo->prepare(
-            "INSERT INTO `points` (user_id, total) VALUES (?, GREATEST(0, ?))
-             ON DUPLICATE KEY UPDATE total = GREATEST(0, total + ?)"
-        )->execute(array($userId, $amount, $amount));
+        $daily = $pdo->prepare('SELECT COALESCE(SUM(xp), 0) FROM `xp_ledger` WHERE user_id = ? AND created_at >= ?');
+        $daily->execute(array($userId, $dayStart));
+        if ((int)$daily->fetchColumn() + XP_PER_ACTION > XP_DAILY_ACTION_CAP) {
+            $pdo->commit();
+            respond(false, array('limited' => true, 'error' => 'Daily XP limit reached — come back tomorrow.', 'points' => fetchPointsRow($pdo, $userId)));
+        }
 
-        respond(true, array('points' => fetchPointsRow($pdo, $userId)));
+        $ins = $pdo->prepare('INSERT IGNORE INTO `xp_ledger` (user_id, action_key, xp, created_at) VALUES (?, ?, ?, ?)');
+        $ins->execute(array($userId, $actionKey, XP_PER_ACTION, $now));
+        if ($ins->rowCount() === 0) {
+            // Already rewarded for exactly this — no change, no XP.
+            $pdo->commit();
+            respond(true, array('awarded' => false, 'points' => fetchPointsRow($pdo, $userId)));
+        }
+
+        $pdo->prepare('UPDATE `points` SET total = total + ? WHERE user_id = ?')->execute(array(XP_PER_ACTION, $userId));
+        $pdo->commit();
+        respond(true, array('awarded' => true, 'points' => fetchPointsRow($pdo, $userId)));
     }
 
     // The once-a-day bonus (see claimDailyBonus() in assets/js/app.js).
@@ -392,8 +471,12 @@ try {
     // not from whatever a browser's localStorage claims — so it can't be
     // re-claimed by clearing local storage or by tampering with the date.
     if ($action === 'claim-daily-bonus') {
-        $today = date('Y-m-d');
-        $yesterday = date('Y-m-d', strtotime('-1 day'));
+        // "Today" is always the SERVER's calendar date — never anything the
+        // browser sends — so changing the device clock/date can't backdate or
+        // forward-date a claim.
+        $todayDt = new DateTimeImmutable('today');
+        $today = $todayDt->format('Y-m-d');
+        $yesterday = $todayDt->modify('-1 day')->format('Y-m-d');
 
         $pdo->beginTransaction();
         $stmt = $pdo->prepare('SELECT total, streak, last_claim_date FROM `points` WHERE user_id = ? FOR UPDATE');
@@ -402,6 +485,18 @@ try {
         $total = $row ? (int)$row['total'] : 0;
         $streak = $row ? (int)$row['streak'] : 0;
         $lastClaim = $row ? $row['last_claim_date'] : null;
+
+        // Backdate guard: a last-claim date that is AFTER today means the
+        // clock went backwards (or the row was tampered with). Refuse rather
+        // than reset the streak and pay out again.
+        if ($lastClaim !== null && $lastClaim > $today) {
+            $pdo->commit();
+            respond(false, array(
+                'error' => 'Your last claim is dated in the future, so the date looks wrong. Daily claiming is paused until the server date catches up.',
+                'points' => array('total' => $total, 'streak' => $streak, 'lastClaimDate' => $lastClaim),
+                'clock' => serverClock(),
+            ));
+        }
 
         if ($lastClaim === $today) {
             $pdo->commit();
@@ -426,11 +521,12 @@ try {
             'amount' => $bonus,
             'isFinalDay' => $finalBonus > 0,
             'points' => array('total' => $newTotal, 'streak' => $newStreak, 'lastClaimDate' => $today),
+            'clock' => serverClock(),
         ));
     }
 
     respond(false, array('error' => 'Unknown action'));
 
 } catch (PDOException $e) {
-    respond(false, array('error' => 'Could not reach the database. Check config.php and make sure sql/a-devtools-schema.sql has been imported.'));
+    respond(false, array('error' => 'Could not reach the database. Check config.php and make sure sql/a-codeplayground-schema.sql has been imported.'));
 }

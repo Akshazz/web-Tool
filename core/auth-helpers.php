@@ -1,7 +1,7 @@
 <?php
 /**
- * Shared account helpers for A-DevTools "Community" accounts — MySQL
- * edition. Accounts live in the `users` table (see sql/a-devtools-schema.sql)
+ * Shared account helpers for A-Code Playground "Community" accounts — MySQL
+ * edition. Accounts live in the `users` table (see sql/a-codeplayground-schema.sql)
  * instead of a JSON file. Passwords are never stored in plain text
  * (password_hash/password_verify).
  */
@@ -115,9 +115,30 @@ function getUserPoints($userId) {
     );
 }
 
+/**
+ * Whether Google Drive backup is set up on this server and linked for this
+ * account, for index.php to hand to the browser (see gdrive.php). Never
+ * throws — the gdrive_links table may not exist yet on an older install.
+ */
+function getGdriveSummary($userId) {
+    require_once __DIR__ . '/google.php';
+    $gs = google_settings(); // dashboard-managed settings, falling back to config.php
+    $configured = google_is_configured($gs);
+    $summary = array('configured' => $configured, 'connected' => false, 'auto' => false,
+        'disabled' => (!$gs['enabled'] && $gs['client_id'] !== ''));
+    if (!$configured) { return $summary; }
+    try {
+        $stmt = getDb()->prepare('SELECT auto_sync FROM gdrive_links WHERE user_id = ?');
+        $stmt->execute(array($userId));
+        $row = $stmt->fetch();
+        if ($row) { $summary['connected'] = true; $summary['auto'] = ((int)$row['auto_sync'] === 1); }
+    } catch (PDOException $e) { /* table not created yet */ }
+    return $summary;
+}
+
 /** Reads the logged-in user (if any) for the current session, or null. */
 function currentUser() {
-    adevtools_start_session();
+    acodeplayground_start_session();
     if (empty($_SESSION['userId'])) { return null; }
     $user = findUserById($_SESSION['userId']);
     if (!$user) {
@@ -126,4 +147,49 @@ function currentUser() {
         return null;
     }
     return publicUser($user);
+}
+
+/**
+ * ---------------------------------------------------------------------
+ * Admin Control session helpers (used by admin.php and admin-dashboard.php)
+ * ---------------------------------------------------------------------
+ * The admin unlock is a separate session flag from the normal Community
+ * login ($_SESSION['userId']). It now also expires after a period of
+ * inactivity (ADMIN_IDLE_TIMEOUT seconds, default 20 minutes — kept below
+ * PHP's default 24-minute session garbage-collection window).
+ */
+if (!defined('ADMIN_IDLE_TIMEOUT')) { define('ADMIN_IDLE_TIMEOUT', 1200); }
+
+function adminSessionClear() {
+    unset($_SESSION['adminUnlocked'], $_SESSION['adminUserId'], $_SESSION['adminLastSeen'], $_SESSION['adminUnlockedAt']);
+}
+
+/**
+ * The raw admin user row unlocked in this session, or null. Pass
+ * $touch = false for background polling that must NOT count as activity
+ * (so an open-but-idle dashboard still times out).
+ */
+function adminSessionUser($touch = true) {
+    acodeplayground_start_session();
+    if (empty($_SESSION['adminUnlocked']) || empty($_SESSION['adminUserId'])) { return null; }
+    $last = isset($_SESSION['adminLastSeen']) ? (int)$_SESSION['adminLastSeen'] : 0;
+    if ($last > 0 && (time() - $last) > ADMIN_IDLE_TIMEOUT) {
+        adminSessionClear();
+        return null;
+    }
+    $raw = findUserById($_SESSION['adminUserId']);
+    if (!$raw || !isAdmin($raw)) {
+        // Role was revoked (or the account was deleted) after unlocking.
+        adminSessionClear();
+        return null;
+    }
+    if ($touch) { $_SESSION['adminLastSeen'] = time(); }
+    return $raw;
+}
+
+/** Seconds until the admin session expires from inactivity (0 if locked). */
+function adminSessionSecondsLeft() {
+    if (empty($_SESSION['adminUnlocked'])) { return 0; }
+    $last = isset($_SESSION['adminLastSeen']) ? (int)$_SESSION['adminLastSeen'] : time();
+    return max(0, ADMIN_IDLE_TIMEOUT - (time() - $last));
 }

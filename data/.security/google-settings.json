@@ -1,0 +1,11 @@
+{
+    "enabled": true,
+    "client_id": "360818796245-pb9r8mg3beb1evftatl42rjmn18ef3d4.apps.googleusercontent.com",
+    "client_secret_enc": "cTzhgb++1Th/lA/Tme/ujFN5iKTzi+spm106ynr6vpvCcBA6j+38xu3iJey5LUCNvzVXqlpxWwrCDqRHjhKY",
+    "base_url": "http://localhost/web-tool",
+    "use_for_signin": true,
+    "keep_backups": 10,
+    "auto_min_minutes": 10,
+    "updated_at": "2026-09-21 11:12:30",
+    "updated_by": "akshaz.masteh@gmail.com"
+}

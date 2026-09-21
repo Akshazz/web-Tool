@@ -1,6 +1,6 @@
 {
-  "name": "A-DevTools — Personal Development Tool",
-  "short_name": "A-DevTools",
+  "name": "A-Code Playground — Personal Development Tool",
+  "short_name": "A-Code Playground",
   "description": "A self-hosted workspace for organizing code, UI experiments, reusable snippets, projects and development notes.",
   "id": "/?page=dashboard",
   "start_url": "./?page=dashboard&source=pwa",

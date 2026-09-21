@@ -17,7 +17,7 @@
 -- (CREATE TABLE IF NOT EXISTS) — same style as database/admin-migration.sql.
 --
 -- Run it the same way:
---   mysql -u root -p a_devtools < database/points-migration.sql
+--   mysql -u root -p a_codeplayground < database/points-migration.sql
 -- or via phpMyAdmin -> Import -> choose this file -> Go.
 
 CREATE TABLE IF NOT EXISTS `points` (

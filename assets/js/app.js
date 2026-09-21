@@ -2,7 +2,7 @@
 'use strict';
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
 /* --- Per-user storage scoping -------------------------------------------
-   A-DevTools supports multiple community accounts, and several people can
+   A-Code Playground supports multiple community accounts, and several people can
    use the same browser/computer. Everything gamified or personal (XP,
    rank, activity feed, getting-started progress, exam results, projects,
    snippets, notes, run counts...) must never leak from one account to the
@@ -16,8 +16,12 @@ const store={get(k,d=[]){try{const v=localStorage.getItem(userScopedKey(k));retu
 const escapeHtml=s=>String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 const escapeAttr=escapeHtml;
 function toast(message){const el=$('#toast');if(!el)return;el.textContent=message;el.classList.add('show');clearTimeout(window.__toast);window.__toast=setTimeout(()=>el.classList.remove('show'),1800)}
-function activity(text){const a=store.get('activity');a.unshift({text,time:new Date().toLocaleString()});store.set('activity',a.slice(0,10));renderActivity()}
+function activity(text){const a=store.get('activity');a.unshift({text,time:new Date().toLocaleString()});store.set('activity',a.slice(0,10));renderActivity();renderNotificationList();updateNotifDot()}
 function renderActivity(){const el=$('#activityList');if(!el)return;const a=store.get('activity').slice(0,5);el.innerHTML=a.length?a.map(x=>`<div class="activity"><b><i class="bx bx-history"></i></b><div>${escapeHtml(x.text)}<div class="muted">${escapeHtml(x.time)}</div></div></div>`).join(''):'<div class="empty">No activity yet.</div>'}
+/* Full (up to 10) activity feed shown in the notification bell's popover —
+   separate from renderActivity() above, which only fills the shorter
+   5-item list on the Settings page. */
+function renderNotificationList(){const el=$('#notificationList');if(!el)return;const a=store.get('activity');el.innerHTML=a.length?a.map(x=>`<div class="activity"><b><i class="bx bx-history"></i></b><div>${escapeHtml(x.text)}<div class="muted">${escapeHtml(x.time)}</div></div></div>`).join(''):'<div class="empty">No activity yet.</div>'}
 /* --- Local disk mirror ---------------------------------------------------
    Projects, snippets and notes live in localStorage for instant offline
    use, but every create/update/delete is also sent to save-data.php, which
@@ -25,12 +29,54 @@ function renderActivity(){const el=$('#activityList');if(!el)return;const a=stor
    way "your data" is never only inside the browser. */
 const DISK_ENDPOINT='save-data.php';
 const CSRF_TOKEN=typeof window!=='undefined'&&window.CSRF_TOKEN?window.CSRF_TOKEN:null;
+/* --- Save-location path helpers ------------------------------------------
+   Mirror of backup_validate_dir() in core/paths.php: tidy what was typed
+   (Explorer's "Copy as path" adds quotes; slashes get mixed or doubled) and
+   catch mistakes inline before a request is sent. The server re-checks
+   everything, so this is a convenience, not the security boundary. */
+let hostIsWindows=true; // updated from the status response
+const RESERVED_WIN_NAMES=/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
+function tidySavePath(raw){
+  let p=String(raw==null?'':raw).trim();
+  p=p.replace(/^(["'])([\s\S]*)\1$/,'$2').trim();
+  if(p===''||/^\\\\/.test(p))return p; // blank, or a UNC path (validateSavePath rejects it)
+  p=/^[A-Za-z]:/.test(p)?p.replace(/[\\/]+/g,'\\'):p.replace(/[\\/]+/g,'/');
+  return /^([A-Za-z]:\\|\/)$/.test(p)?p:p.replace(/[\\/]+$/,'');
+}
+function validateSavePath(raw){
+  const value=tidySavePath(raw),bad=error=>({ok:false,value,error});
+  if(value==='')return{ok:true,value:''}; // blank = automatic default
+  if(/[\u0000-\u001f]/.test(value))return bad('The path contains invalid characters.');
+  if(value.length>240)return bad('That path is too long (240 characters maximum).');
+  if(/^\\\\/.test(value))return bad('Network paths (\\\\server\\share) are not supported. Use a drive letter, e.g. D:\\A-CodePlayground.');
+  const hasDrive=/^[A-Za-z]:[\\/]/.test(value);
+  if(!hasDrive&&/^[A-Za-z]:/.test(value))return bad('Add a backslash after the drive letter, e.g. C:\\A-CodePlayground.');
+  if(hasDrive&&!hostIsWindows)return bad('Drive-letter paths (like C:\\...) only work when the server runs on Windows. Use a /path/style folder instead.');
+  const winRules=hasDrive||hostIsWindows;
+  for(const seg of (hasDrive?value.slice(3):value).split(/[\\/]+/).filter(Boolean)){
+    if(seg==='.')continue;
+    if(seg==='..')return bad('".." is not allowed. Enter the full folder path instead.');
+    if(winRules){
+      if(/[<>:"|?*]/.test(seg))return bad('Folder names cannot contain any of these characters: < > : " | ? *');
+      if(/[ .]$/.test(seg))return bad('Folder names cannot end with a space or a dot.');
+      if(RESERVED_WIN_NAMES.test(seg))return bad('"'+seg+'" is a reserved name on Windows. Pick a different folder name.');
+    }
+  }
+  return{ok:true,value};
+}
+function showSavePathError(msg){
+  const input=$('#dataLocationInput'),hint=$('#dataLocationHint');
+  if(input){if(msg)input.setAttribute('aria-invalid','true');else input.removeAttribute('aria-invalid')}
+  if(hint){hint.hidden=!msg;const s=hint.querySelector('span');if(s)s.textContent=msg||''}
+}
 function diskSaveItem(type,item){
   if(!item)return;
   fetch(DISK_ENDPOINT+'?action=save-item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,item,csrf:CSRF_TOKEN})}).catch(()=>{});
+  if(window.gdriveNotifyChange)window.gdriveNotifyChange();
 }
 function diskDeleteItem(type,id){
   fetch(DISK_ENDPOINT+'?action=delete-item',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,id,csrf:CSRF_TOKEN})}).catch(()=>{});
+  if(window.gdriveNotifyChange)window.gdriveNotifyChange();
 }
 function collectSnapshot(){
   return{projects:store.get('projects'),snippets:store.get('snippets'),notes:store.get('notes'),savedAt:Date.now()};
@@ -52,7 +98,7 @@ function downloadBackupFile(){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   const ts=new Date().toISOString().replace(/[:.]/g,'-');
-  a.href=url;a.download='a-devtools-backup-'+ts+'.json';
+  a.href=url;a.download='a-codeplayground-backup-'+ts+'.json';
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
   toast('Backup file downloading — pick Desktop or any folder to save it');
@@ -83,7 +129,7 @@ function importBackupFile(file){
     let snapshot;
     try{snapshot=JSON.parse(reader.result)}catch(e){toast('That file is not valid JSON');return}
     if(!snapshot||typeof snapshot!=='object'||(!Array.isArray(snapshot.projects)&&!Array.isArray(snapshot.snippets)&&!Array.isArray(snapshot.notes))){
-      toast('That file does not look like an A-DevTools backup');return;
+      toast('That file does not look like an A-Code Playground backup');return;
     }
     const replace=confirm('Import this backup?\n\nOK = merge with your current data (matching items get overwritten)\nCancel = replace all current projects, snippets and notes with the file\'s contents');
     applyImportedSnapshot(snapshot,replace?'merge':'replace');
@@ -120,6 +166,7 @@ function refreshDiskStatus(){
       updateDashboardSaveStatus(null);
       return;
     }
+    if(typeof res.isWindows==='boolean')hostIsWindows=res.isWindows;
     const c=res.counts||{};
     const last=res.lastBackup?new Date(res.lastBackup.savedAt).toLocaleString():'No full backup yet';
     if(el)el.innerHTML=`<p class="muted"><span class="status-ok"><i class="bx bx-check-circle"></i> Connected.</span> Files are written to <code>${escapeHtml(res.path)}</code> on this computer${res.isCustom?' <span class="tag">custom location</span>':''}.</p><div class="disk-counts"><span><b>${c.projects||0}</b> projects</span><span><b>${c.snippets||0}</b> snippets</span><span><b>${c.components||0}</b> components</span><span><b>${c.notes||0}</b> notes</span></div><p class="muted">Last full backup: ${escapeHtml(last)}</p>`;
@@ -133,12 +180,15 @@ function refreshDiskStatus(){
 }
 function saveDataLocation(){
   const input=$('#dataLocationInput'),btn=$('#saveLocationBtn');if(!input)return;
-  const dataDir=input.value.trim();
+  const check=validateSavePath(input.value);
+  if(!check.ok){showSavePathError(check.error);input.focus();return}
+  showSavePathError('');
+  const dataDir=check.value;input.value=dataDir;
   if(btn){btn.disabled=true;btn.dataset.original=btn.innerHTML;btn.innerHTML='<span class="spinner-ring sm"></span> Applying…'}
   fetch(DISK_ENDPOINT+'?action=set-location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataDir,csrf:CSRF_TOKEN})})
     .then(r=>r.json()).then(res=>{
-      if(res&&res.ok){localStorage.setItem('localSaveConfirmed','true');toast(dataDir?'Save location updated':'Save location reset to default');refreshDiskStatus()}
-      else{toast((res&&res.error)||'Could not use that folder')}
+      if(res&&res.ok){localStorage.setItem('localSaveConfirmed','true');if(typeof res.value==='string')input.value=res.value;toast(dataDir?'Save location updated':'Save location reset to default');refreshDiskStatus()}
+      else{const msg=(res&&res.error)||'Could not use that folder';showSavePathError(msg);toast(msg)}
     })
     .catch(()=>toast('Could not reach the local save endpoint'))
     .finally(()=>{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.original}});
@@ -148,6 +198,9 @@ $('#downloadBackupBtn')?.addEventListener('click',downloadBackupFile);
 $('#importBackupInput')?.addEventListener('change',e=>{importBackupFile(e.target.files[0]);e.target.value=''});
 $('#importBackupBtn')?.addEventListener('click',()=>$('#importBackupInput')?.click());
 $('#saveLocationBtn')?.addEventListener('click',saveDataLocation);
+$('#dataLocationInput')?.addEventListener('input',()=>showSavePathError(''));
+$('#dataLocationInput')?.addEventListener('blur',e=>{if(!e.target.value.trim())return;const c=validateSavePath(e.target.value);e.target.value=c.value;showSavePathError(c.ok?'':c.error)});
+$('#dataLocationInput')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();saveDataLocation()}});
 $$('#viewBackupFolderBtn').forEach(btn=>btn.addEventListener('click',()=>{
   if(!CSRF_TOKEN){toast('Log in to open the backup folder');return}
   btn.disabled=true;
@@ -180,11 +233,86 @@ function setDesktopCollapsed(collapsed){
   if(sidebarToggleBtn) sidebarToggleBtn.title=collapsed?'Expand sidebar':'Collapse sidebar';
   localStorage.setItem('sidebarCollapsed',collapsed?'true':'false');
 }
+const sidebarBackdrop=$('#sidebarBackdrop');
+function setMobileSidebarOpen(open){
+  sidebar?.classList.toggle('open',open);
+  if(sidebarBackdrop) sidebarBackdrop.hidden=!open;
+  sidebarToggleBtn?.setAttribute('aria-expanded',open?'true':'false');
+}
 $('#sidebarToggle')?.addEventListener('click',()=>{
-  if(window.innerWidth<=820){sidebar?.classList.toggle('open');return}
+  if(window.innerWidth<=820){setMobileSidebarOpen(!sidebar?.classList.contains('open'));return}
   setDesktopCollapsed(!sidebar?.classList.contains('collapsed'));
+  closeNavFlyout();syncNavGroupAria(); // the popover only exists in the minimized rail
 });
+sidebarBackdrop?.addEventListener('click',()=>setMobileSidebarOpen(false));
+/* The Playgrounds dropdown header is a .nav-item too, but it only expands/collapses the group,
+   so it must NOT close the mobile drawer - only a real link inside it (or any other page link) should. */
+sidebar?.addEventListener('click',(e)=>{if(window.innerWidth<=820 && e.target.closest('.nav-item:not(.nav-group-toggle)')) setMobileSidebarOpen(false)});
+/* Sidebar "Playgrounds" dropdown (Code / PHP / SQL / Combined). index.php renders it open only while
+   one of its pages is the current page, so it is closed everywhere else. This click just expands or
+   collapses it for the current page view; nothing is remembered, so navigating away resets it. */
+const navGroup=$('#navGroupPlaygrounds'),navGroupToggle=$('#navGroupToggle');
+/* Playgrounds popover. When the sidebar is minimized to its icons-only rail (desktop) there is no room
+   for an inline dropdown, so the same toggle opens a popover to the right of the icon instead. It uses
+   the browser's native Popover API (top layer, so the sidebar's overflow can't clip it) in "manual"
+   mode: this code decides when it opens and closes. Browsers without the Popover API keep the plain
+   icon column (see the @supports block in app.css) and the toggle simply never opens a popover. */
+const navFlyout=$('#navFlyout');
+const canPopover=!!navFlyout&&typeof navFlyout.showPopover==='function'&&typeof navFlyout.hidePopover==='function';
+const inRail=()=>canPopover&&!!sidebar&&window.innerWidth>820&&sidebar.classList.contains('collapsed');
+const flyoutOpen=()=>!!navFlyout&&navFlyout.classList.contains('is-open');
+function syncNavGroupAria(){
+  if(!navGroupToggle)return;
+  const rail=inRail();
+  navGroupToggle.setAttribute('aria-controls',rail?'navFlyout':'navGroupBody');
+  navGroupToggle.setAttribute('aria-expanded',String(rail?flyoutOpen():!!navGroup?.classList.contains('open')));
+}
+function openNavFlyout(){
+  if(!canPopover||!navGroupToggle)return;
+  const r=navGroupToggle.getBoundingClientRect();
+  navFlyout.style.left=Math.round(r.right+10)+'px';
+  navFlyout.style.top=Math.round(r.top)+'px';
+  navFlyout.showPopover();
+  navFlyout.classList.add('is-open');
+  // keep it fully on screen if the icon sits near the bottom edge
+  const over=r.top+navFlyout.offsetHeight-(window.innerHeight-8);
+  if(over>0)navFlyout.style.top=Math.max(8,Math.round(r.top-over))+'px';
+  syncNavGroupAria();
+  (navFlyout.querySelector('.nav-item.active')||navFlyout.querySelector('.nav-item'))?.focus();
+}
+function closeNavFlyout(returnFocus){
+  if(!canPopover||!flyoutOpen())return;
+  navFlyout.classList.remove('is-open');
+  try{navFlyout.hidePopover()}catch(err){}
+  syncNavGroupAria();
+  if(returnFocus)navGroupToggle?.focus();
+}
+navGroupToggle?.addEventListener('click',()=>{
+  if(inRail()){flyoutOpen()?closeNavFlyout():openNavFlyout();return}
+  const open=!navGroup.classList.contains('open');
+  navGroup.classList.toggle('open',open);
+  syncNavGroupAria();
+});
+if(navFlyout){
+  document.addEventListener('click',e=>{if(flyoutOpen()&&!navFlyout.contains(e.target)&&!navGroupToggle?.contains(e.target))closeNavFlyout()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&flyoutOpen())closeNavFlyout(true)});
+  navFlyout.addEventListener('focusout',e=>{const n=e.relatedTarget;if(n&&!navFlyout.contains(n)&&n!==navGroupToggle)closeNavFlyout()});
+  navFlyout.addEventListener('toggle',e=>{if(e.newState==='closed'&&flyoutOpen()){navFlyout.classList.remove('is-open');syncNavGroupAria()}});
+  navFlyout.addEventListener('keydown',e=>{
+    const items=Array.from(navFlyout.querySelectorAll('.nav-item')),i=items.indexOf(document.activeElement);
+    if(e.key==='ArrowDown'){e.preventDefault();items[(i+1)%items.length].focus()}
+    else if(e.key==='ArrowUp'){e.preventDefault();items[(i-1+items.length)%items.length].focus()}
+    else if(e.key==='Home'){e.preventDefault();items[0].focus()}
+    else if(e.key==='End'){e.preventDefault();items[items.length-1].focus()}
+  });
+  window.addEventListener('resize',()=>{closeNavFlyout();syncNavGroupAria()});
+  sidebar?.addEventListener('scroll',()=>closeNavFlyout());
+}
+syncNavGroupAria();
+document.addEventListener('keydown',(e)=>{if(e.key==='Escape' && sidebar?.classList.contains('open')) setMobileSidebarOpen(false)});
+window.addEventListener('resize',()=>{if(window.innerWidth>820) setMobileSidebarOpen(false)});
 setDesktopCollapsed(localStorage.getItem('sidebarCollapsed')==='true');
+syncNavGroupAria(); // the saved minimized state is applied just above, after the dropdown wiring ran
 /* Name of the CodeMirror theme that matches the app's current light/dark
    mode - 'material-darker' in dark mode, the light 'neat' theme otherwise.
    Used both when an editor first mounts and whenever the theme toggle
@@ -198,31 +326,225 @@ function applyCodeMirrorTheme(){
   const name=cmThemeName();
   [cmHtml,cmCss,cmJs].forEach(cm=>{if(cm){cm.setOption('theme',name);cm.refresh()}});
   $$('.code-mini-editor').forEach(el=>{if(el._cm){el._cm.setOption('theme',name);el._cm.refresh()}});
+  if(activeNoteCm){activeNoteCm.setOption('theme',name);activeNoteCm.refresh()}
 }
 function setTheme(dark){document.body.classList.toggle('dark',!!dark);localStorage.setItem('theme',dark?'dark':'light');const c=$('#darkSetting');if(c)c.checked=!!dark;const ti=$('#themeToggle')?.querySelector('.bx');if(ti)ti.className='bx '+(dark?'bx-sun':'bx-moon');const tl=$('#themeToggleLabel');if(tl)tl.textContent=dark?'Light mode':'Dark mode';applyCodeMirrorTheme()}
 $('#themeToggle')?.addEventListener('click',()=>setTheme(!document.body.classList.contains('dark')));
 setTheme(localStorage.getItem('theme')==='dark');
 $('#darkSetting')?.addEventListener('change',e=>setTheme(e.target.checked));
-$('#notificationBtn')?.addEventListener('click',()=>{location.href='?page=dashboard';toast('Activity is available on the Dashboard')});
+/* Small red dot on the bell showing there's activity the person hasn't
+   opened the popover to see yet. "Seen" is tracked as how many activity
+   entries existed the last time they opened it (per-browser, like the
+   theme setting), not per-account, since it's purely a UI cue. */
+function updateNotifDot(){
+  const dot=$('#notifDot');if(!dot)return;
+  const count=store.get('activity').length;
+  const seen=parseInt(localStorage.getItem('activitySeenCount')||'0',10);
+  dot.hidden=count<=seen;
+}
+const notifBtn=$('#notificationBtn'),notifDropdown=$('#notificationDropdown');
+if(notifBtn&&notifDropdown){
+  const closeNotif=()=>{notifDropdown.hidden=true;notifBtn.setAttribute('aria-expanded','false')};
+  notifBtn.addEventListener('click',e=>{
+    e.stopPropagation();
+    const willOpen=notifDropdown.hidden;
+    closeNotif();
+    if(willOpen){renderNotificationList();notifDropdown.hidden=false;notifBtn.setAttribute('aria-expanded','true');localStorage.setItem('activitySeenCount',String(store.get('activity').length));updateNotifDot()}
+  });
+  document.addEventListener('click',e=>{if(!notifDropdown.hidden&&!e.target.closest('#notificationMenu'))closeNotif()});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeNotif()});
+}
+updateNotifDot();
 const modal=$('#modal'),modalBody=$('#modalBody');
-function openModal(html,extraClass){if(!modal)return;modalBody.innerHTML=html;const box=modal.querySelector('.modal');if(box){box.classList.remove('modal-compact');if(extraClass)box.classList.add(extraClass)}modal.classList.add('show');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');modalBody.querySelectorAll('.code-mini-editor.active').forEach(mountCodeEditor);setTimeout(()=>{const first=modal.querySelector('input,textarea,select,button:not(.modal-close)');first?.focus()},30)}
-function closeModal(){if(!modal)return;modal.classList.remove('show');modal.setAttribute('aria-hidden','true');document.body.classList.remove('modal-open')}
+function openModal(html,extraClass){if(!modal)return;modalBody.innerHTML=html;const box=modal.querySelector('.modal');if(box){box.classList.remove('modal-compact','modal-profile');if(extraClass)box.classList.add(extraClass)}modal.classList.add('show');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');modalBody.querySelectorAll('.code-mini-editor.active').forEach(mountCodeEditor);setTimeout(()=>{const first=modal.querySelector('input,textarea,select,button:not(.modal-close)');first?.focus()},30)}
+function closeModal(){if(!modal)return;modal.classList.remove('show');modal.setAttribute('aria-hidden','true');document.body.classList.remove('modal-open');activeNoteCm=null;if(activeDropdownClose){activeDropdownClose();activeDropdownClose=null}}
 /* Exposed globally: the first-run experience picker and tour live in a separate
    script block later in the file and call these by name. */
 window.openModal=openModal;
 window.closeModal=closeModal;
 $('#modalClose')?.addEventListener('click',closeModal);modal?.addEventListener('click',e=>{if(e.target===modal)closeModal()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal?.classList.contains('show'))closeModal()});
+/* --- Confirmation dialog + Recycle Bin ----------------------------------
+   Every delete action in the app (project/note/snippet) goes through this
+   pair instead of a hard delete: confirmDialog() asks first, and the item
+   is moved into the 'trash' store rather than being wiped immediately, so
+   it can still be restored (or permanently removed) from the Recycle Bin. */
+function confirmDialog(opts){
+  const title=opts.title||'Are you sure?',message=opts.message||'',confirmLabel=opts.confirmLabel||'Confirm',danger=!!opts.danger,onConfirm=opts.onConfirm;
+  openModal(`<h2>${escapeHtml(title)}</h2><p class="modal-subtitle">${escapeHtml(message)}</p><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="${danger?'danger-btn confirm-danger':'primary-btn'}" id="confirmActionBtn"><i class="bx ${danger?'bx-trash':'bx-check'}"></i> ${escapeHtml(confirmLabel)}</button></div>`,'modal-compact');
+  $('#confirmActionBtn').onclick=()=>{closeModal();if(typeof onConfirm==='function')onConfirm()};
+}
+function trashList(){return store.get('trash')}
+function updateTrashCount(){const n=trashList().length,el=$('#trashCount');if(el){el.textContent=n;el.classList.toggle('hidden',n===0)}}
+function trashTypeMeta(type){
+  if(type==='projects')return{label:'Project',icon:'bx-folder'};
+  if(type==='notes')return{label:'Note',icon:'bx-bookmark'};
+  if(type==='components')return{label:'Component',icon:'bx-layer'};
+  return{label:'Snippet',icon:'bx-code-alt'};
+}
+/* Saved Components live in the same underlying 'snippets' store as regular
+   snippets (only an id prefix tells them apart — see snippetSource()), so
+   the real trash "type" for both is always 'snippets'. This derives which
+   Recycle Bin tab/group an entry should visually appear under, without
+   changing what gets passed to restore/delete (those still use the real
+   type so they hit the right store and disk endpoint). */
+function trashDisplayType(entry){
+  if(entry.type==='snippets')return snippetSource(entry.data)==='component'?'components':'snippets';
+  return entry.type;
+}
+function trashItemLabel(entry){
+  if(entry.type==='projects')return entry.data.name||'Untitled Project';
+  if(entry.type==='notes')return entry.data.title||'Untitled Note';
+  return entry.data.title||(trashDisplayType(entry)==='components'?'Untitled Component':'Untitled Snippet');
+}
+function timeAgo(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60)return 'just now';
+  const m=Math.floor(s/60);if(m<60)return m+(m===1?' minute ago':' minutes ago');
+  const h=Math.floor(m/60);if(h<24)return h+(h===1?' hour ago':' hours ago');
+  const d=Math.floor(h/24);return d+(d===1?' day ago':' days ago');
+}
+/* Moves an item out of its live list and into the Recycle Bin. The caller
+   has already removed it from the live store; this just files the copy. */
+function addToTrash(type,item){
+  const t=trashList();
+  t.unshift({id:item.id,type,data:item,deletedAt:Date.now()});
+  store.set('trash',t);
+  updateTrashCount();
+}
+function restoreFromTrash(type,id){
+  const t=trashList(),idx=t.findIndex(x=>String(x.id)===String(id)&&x.type===type);
+  if(idx===-1)return;
+  const entry=t[idx];
+  const meta=trashTypeMeta(trashDisplayType(entry));
+  t.splice(idx,1);store.set('trash',t);
+  const list=store.get(type);
+  list.unshift(entry.data);store.set(type,list);
+  diskSaveItem(type,entry.data);
+  if(type==='projects')renderProjects();else if(type==='notes')renderNotes();else renderSnippets();
+  updateCounts();
+  activity('Restored '+meta.label.toLowerCase()+': '+trashItemLabel(entry));
+  toast(meta.label+' restored');
+  openRecycleBin();
+}
+function purgeFromTrash(type,id){
+  const t=trashList(),idx=t.findIndex(x=>String(x.id)===String(id)&&x.type===type);
+  if(idx===-1)return;
+  t.splice(idx,1);store.set('trash',t);
+  diskDeleteItem(type,id);
+  updateTrashCount();
+  toast('Deleted permanently');
+  openRecycleBin();
+}
+let trashFilter='all';
+function openRecycleBin(){
+  const t=trashList();
+  const TRASH_GROUP_ORDER=['projects','notes','snippets','components'];
+  if(trashFilter!=='all'&&!t.some(x=>trashDisplayType(x)===trashFilter))trashFilter='all';
+  const presentTypes=TRASH_GROUP_ORDER.filter(type=>t.some(x=>trashDisplayType(x)===type));
+  const tabsHtml=t.length?`<div class="saved-tabs" id="trashTabs"><button type="button" class="saved-tab${trashFilter==='all'?' active':''}" data-trash-filter="all">All <span class="count-pill">${t.length}</span></button>${presentTypes.map(type=>{const tm=trashTypeMeta(type),n=t.filter(x=>trashDisplayType(x)===type).length;return `<button type="button" class="saved-tab${trashFilter===type?' active':''}" data-trash-filter="${type}"><i class="bx ${tm.icon}"></i> ${tm.label}s <span class="count-pill">${n}</span></button>`}).join('')}</div>`:'';
+  const shownTypes=trashFilter==='all'?TRASH_GROUP_ORDER:[trashFilter];
+  const rows=t.length?shownTypes.map(type=>{
+    const items=t.filter(x=>trashDisplayType(x)===type);
+    if(!items.length)return '';
+    const tm=trashTypeMeta(type);
+    const groupRows=items.map(entry=>`<div class="trash-row" data-trash-id="${escapeAttr(entry.id)}" data-trash-type="${entry.type}"><div class="trash-row-icon"><i class="bx ${tm.icon}"></i></div><div class="trash-row-body"><div class="trash-row-title">${escapeHtml(trashItemLabel(entry))}</div><div class="trash-row-meta muted">Deleted ${timeAgo(entry.deletedAt)}</div></div><div class="trash-row-actions"><button class="small-btn" data-restore-trash><i class="bx bx-undo"></i> Restore</button><button class="small-btn danger-btn" data-purge-trash><i class="bx bx-trash"></i> Delete Forever</button></div></div>`).join('');
+    return trashFilter==='all'?`<div class="trash-group"><div class="trash-group-heading"><i class="bx ${tm.icon}"></i> ${tm.label}s <span class="count-pill">${items.length}</span></div><div class="trash-group-rows">${groupRows}</div></div>`:`<div class="trash-group-rows">${groupRows}</div>`;
+  }).join(''):'<div class="empty">Recycle Bin is empty.</div>';
+  openModal(`<h2><i class="bx bx-trash"></i> Recycle Bin</h2><p class="modal-subtitle">Deleted projects, notes, snippets and components stay here until you restore them or delete them permanently.</p>${tabsHtml}<div class="trash-list">${rows}</div><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Close</button>${t.length?'<button class="danger-btn" id="emptyTrashBtn"><i class="bx bx-trash"></i> Empty Recycle Bin</button>':''}</div>`);
+  $('#trashTabs')?.addEventListener('click',e=>{
+    const tab=e.target.closest('[data-trash-filter]');if(!tab)return;
+    trashFilter=tab.dataset.trashFilter;openRecycleBin();
+  });
+  $('.trash-list')?.addEventListener('click',e=>{
+    const row=e.target.closest('.trash-row');if(!row)return;
+    const id=row.dataset.trashId,type=row.dataset.trashType;
+    if(e.target.closest('[data-restore-trash]')){restoreFromTrash(type,id);return}
+    if(e.target.closest('[data-purge-trash]')){
+      const label=row.querySelector('.trash-row-title')?.textContent||'this item';
+      confirmDialog({title:'Delete permanently?',message:'"'+label+'" will be permanently deleted and cannot be recovered.',confirmLabel:'Delete Forever',danger:true,onConfirm:()=>purgeFromTrash(type,id)});
+    }
+  });
+  $('#emptyTrashBtn')?.addEventListener('click',()=>{
+    confirmDialog({title:'Empty Recycle Bin?',message:'All '+trashList().length+' item(s) in the Recycle Bin will be permanently deleted. This cannot be undone.',confirmLabel:'Empty Recycle Bin',danger:true,onConfirm:()=>{
+      trashList().forEach(entry=>diskDeleteItem(entry.type,entry.id));
+      store.set('trash',[]);
+      updateTrashCount();
+      toast('Recycle Bin emptied');
+      closeModal();
+    }});
+  });
+}
+$('#recycleBinBtn')?.addEventListener('click',()=>{trashFilter='all';openRecycleBin()});
+/* Status options shown in the New/Edit Project modal and rendered as a
+   colored badge on each project card. */
+const PROJECT_STATUSES=[
+  {v:'planning',label:'Planning',icon:'bx-flag',cls:'status-planning',color:'#7c5cd6'},
+  {v:'progress',label:'In Progress',icon:'bx-loader-circle',cls:'status-progress',color:'#3b82c4'},
+  {v:'completed',label:'Completed',icon:'bx-check-circle',cls:'status-completed',color:'#2d8a42'},
+  {v:'hold',label:'On Hold',icon:'bx-pause-circle',cls:'status-hold',color:'#c8920a'}
+];
+function projectStatusMeta(v){return PROJECT_STATUSES.find(s=>s.v===v)||PROJECT_STATUSES[1]}
+const PROJECT_DESC_MAX=400;
+const TECH_SUGGESTIONS=['PHP','JavaScript','MySQL','HTML5 / CSS3','Full Stack','React','Node.js','Native PHP'];
 function projectForm(editId){
   const p=store.get('projects'),item=editId?p.find(x=>String(x.id)===String(editId)):null;
-  openModal(`<h2 id="modalTitle">${item?'Edit':'New'} Project</h2><p class="modal-subtitle">${item?'Update this local project reference.':'Create a local project reference for your workspace.'}</p><div class="form-grid"><label>Project name<input id="mName" class="input" value="${escapeAttr(item?.name||'')}" placeholder="e.g. Client Portal"></label><label>Technology<input id="mTech" class="input" value="${escapeAttr(item?.tech||'')}" placeholder="PHP, JavaScript, MySQL"></label><label class="full">Description<textarea id="mDesc" class="input" rows="5" placeholder="What are you building?">${escapeHtml(item?.desc||'')}</textarea></label></div><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProject"><i class="bx bx-save"></i> ${item?'Update':'Save'} Project</button></div>`);
-  $('#saveProject').onclick=()=>{const name=$('#mName').value.trim()||'Untitled Project',tech=$('#mTech').value.trim()||'Web',desc=$('#mDesc').value.trim();if(item){item.name=name;item.tech=tech;item.desc=desc;item.updatedAt=Date.now();store.set('projects',p);diskSaveItem('projects',item);awardPoints(5,'Updated project: '+name)}else{const newProject={id:Date.now(),name,tech,desc};p.unshift(newProject);store.set('projects',p);diskSaveItem('projects',newProject);awardPoints(15,'Created project: '+name);markGs('createdProject')}closeModal();renderProjects();updateCounts();toast(item?'Project updated on your local drive':'Project saved to your local drive')};
+  const curStatus=item?.status||'progress',curMeta=projectStatusMeta(curStatus);
+  const descLen=(item?.desc||'').length;
+  openModal(`<h2 id="modalTitle">${item?'Edit':'New'} Project</h2><p class="modal-subtitle">${item?'Update this local project reference.':'Create a local project reference for your workspace.'}</p><div class="form-grid">`+
+`<label>Project name<div class="field-group"><i class="bx bx-folder field-icon"></i><input id="mName" class="input has-icon" value="${escapeAttr(item?.name||'')}" placeholder="e.g. Client Portal"></div></label>`+
+`<label>Technology<div class="field-group"><i class="bx bx-chip field-icon"></i><input id="mTech" class="input has-icon" autocomplete="off" value="${escapeAttr(item?.tech||'')}" placeholder="PHP, JavaScript, MySQL"></div></label>`+
+`<label class="full">Quick pick<div class="tech-suggest" id="techSuggest">${TECH_SUGGESTIONS.map(t=>`<button type="button" class="tech-chip" data-tech="${escapeAttr(t)}">${escapeHtml(t)}</button>`).join('')}</div></label>`+
+`<label class="full">Status<div class="status-dropdown" id="statusDropdown">`+
+  `<button type="button" class="status-trigger" id="statusTrigger" aria-haspopup="listbox" aria-expanded="false">`+
+    `<i class="bx ${curMeta.icon} status-trigger-dot" style="color:${curMeta.color}"></i>`+
+    `<span class="status-trigger-text">${curMeta.label}</span>`+
+    `<i class="bx bx-chevron-down status-trigger-caret"></i>`+
+  `</button>`+
+  `<div class="status-options" id="statusOptions" role="listbox" hidden>`+
+    PROJECT_STATUSES.map(s=>`<button type="button" class="status-option${s.v===curStatus?' active':''}" role="option" data-status="${s.v}" aria-selected="${s.v===curStatus}"><i class="bx ${s.icon}" style="color:${s.color}"></i><span>${s.label}</span>${s.v===curStatus?'<i class="bx bx-check status-option-check"></i>':''}</button>`).join('')+
+  `</div>`+
+`</div></label>`+
+`<label class="full">Description<div class="field-textarea-wrap"><textarea id="mDesc" class="input" rows="5" maxlength="${PROJECT_DESC_MAX}" placeholder="What are you building?">${escapeHtml(item?.desc||'')}</textarea><span class="field-char-count" id="mDescCount">${descLen}/${PROJECT_DESC_MAX}</span></div></label>`+
+`</div><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProject"><i class="bx bx-save"></i> ${item?'Update':'Save'} Project</button></div>`);
+  const descEl=$('#mDesc'),countEl=$('#mDescCount');
+  descEl?.addEventListener('input',()=>{if(countEl)countEl.textContent=descEl.value.length+'/'+PROJECT_DESC_MAX});
+  /* --- Technology quick-pick chips: click toggles that term in/out of the
+     comma-separated input, and typing manually keeps the chips in sync. --- */
+  const techEl=$('#mTech');
+  function techList(){return techEl.value.split(',').map(t=>t.trim()).filter(Boolean)}
+  function syncTechChips(){const list=techList().map(t=>t.toLowerCase());$$('#techSuggest .tech-chip').forEach(chip=>chip.classList.toggle('active',list.includes(chip.dataset.tech.toLowerCase())))}
+  $$('#techSuggest .tech-chip').forEach(chip=>chip.addEventListener('click',()=>{
+    const term=chip.dataset.tech,list=techList(),idx=list.findIndex(t=>t.toLowerCase()===term.toLowerCase());
+    if(idx>-1)list.splice(idx,1);else list.push(term);
+    techEl.value=list.join(', ');
+    syncTechChips();techEl.focus();
+  }));
+  techEl?.addEventListener('input',syncTechChips);
+  syncTechChips();
+  /* --- Custom status dropdown: colored icon + label per option, closes on
+     outside click, Escape (via the modal's own handler) or re-toggling. --- */
+  let selectedStatus=curStatus;
+  const statusDd=$('#statusDropdown'),statusTrigger=$('#statusTrigger'),statusOptions=$('#statusOptions');
+  function closeStatusDd(){statusDd.classList.remove('open');statusOptions.hidden=true;statusTrigger.setAttribute('aria-expanded','false');document.removeEventListener('click',onDocClick);document.removeEventListener('keydown',onKeyClose);if(activeDropdownClose===closeStatusDd)activeDropdownClose=null}
+  function onDocClick(e){if(!statusDd.contains(e.target))closeStatusDd()}
+  function onKeyClose(e){if(e.key==='Escape')closeStatusDd()}
+  function openStatusDd(){statusDd.classList.add('open');statusOptions.hidden=false;statusTrigger.setAttribute('aria-expanded','true');document.addEventListener('click',onDocClick);document.addEventListener('keydown',onKeyClose);activeDropdownClose=closeStatusDd}
+  statusTrigger?.addEventListener('click',e=>{e.stopPropagation();statusOptions.hidden?openStatusDd():closeStatusDd()});
+  $$('#statusOptions .status-option').forEach(opt=>opt.addEventListener('click',()=>{
+    selectedStatus=opt.dataset.status;const meta=projectStatusMeta(selectedStatus);
+    const dot=statusTrigger.querySelector('.status-trigger-dot');dot.className='bx '+meta.icon+' status-trigger-dot';dot.style.color=meta.color;
+    statusTrigger.querySelector('.status-trigger-text').textContent=meta.label;
+    $$('#statusOptions .status-option').forEach(o=>{const active=o===opt;o.classList.toggle('active',active);o.setAttribute('aria-selected',String(active));const check=o.querySelector('.status-option-check');if(active&&!check){o.insertAdjacentHTML('beforeend','<i class="bx bx-check status-option-check"></i>')}else if(!active&&check){check.remove()}});
+    closeStatusDd();
+  }));
+  $('#saveProject').onclick=()=>{const name=$('#mName').value.trim()||'Untitled Project',tech=$('#mTech').value.trim()||'Web',desc=$('#mDesc').value.trim(),status=selectedStatus;const fp=xpFp('project',name,tech,desc,status);if(item&&xpFp('project',item.name,item.tech,item.desc,item.status)===fp){closeModal();toast('No changes to save');return}if(item){item.name=name;item.tech=tech;item.desc=desc;item.status=status;item.updatedAt=Date.now();store.set('projects',p);diskSaveItem('projects',item);awardOnce('project',fp,'Updated project: '+name)}else{const newProject={id:Date.now(),name,tech,desc,status};p.unshift(newProject);store.set('projects',p);diskSaveItem('projects',newProject);awardOnce('project',fp,'Created project: '+name);markGs('createdProject')}closeModal();renderProjects();updateCounts();toast(item?'Project updated on your local drive':'Project saved to your local drive')};
 }
 ['newProject','newProjectHero','newProjectPage'].forEach(id=>$('#'+id)?.addEventListener('click',()=>projectForm()));
-function renderProjects(){const el=$('#projectGrid');if(!el)return;const p=store.get('projects');el.innerHTML=p.length?p.map(x=>`<article class="project-card"><div class="card-title">${escapeHtml(x.name)}</div><div class="card-meta">${escapeHtml(x.tech)}</div><p>${escapeHtml(x.desc||'No description.')}</p><div class="card-actions"><button class="small-btn" data-edit-project="${escapeAttr(x.id)}"><i class="bx bx-edit"></i> Edit</button><button class="small-btn" data-delete-project="${escapeAttr(x.id)}"><i class="bx bx-trash"></i> Delete</button></div></article>`).join(''):'<div class="empty">No projects yet. Create your first project.</div>'}
+function renderProjects(){const el=$('#projectGrid');if(!el)return;const p=store.get('projects');el.innerHTML=p.length?p.map(x=>{const sm=projectStatusMeta(x.status);return `<article class="project-card"><div class="project-card-top"><div class="card-title">${escapeHtml(x.name)}</div><span class="status-badge ${sm.cls}"><i class="bx ${sm.icon}"></i>${sm.label}</span></div><div class="card-meta tech-meta"><i class="bx bx-chip"></i> ${escapeHtml(x.tech)}</div><p>${escapeHtml(x.desc||'No description.')}</p><div class="card-actions"><button class="small-btn" data-edit-project="${escapeAttr(x.id)}"><i class="bx bx-edit"></i> Edit</button><button class="small-btn" data-delete-project="${escapeAttr(x.id)}"><i class="bx bx-trash"></i> Delete</button></div></article>`}).join(''):'<div class="empty">No projects yet. Create your first project.</div>'}
 $('#projectGrid')?.addEventListener('click',e=>{const editBtn=e.target.closest('[data-edit-project]');if(editBtn){projectForm(editBtn.getAttribute('data-edit-project'));return}const btn=e.target.closest('[data-delete-project]');if(!btn)return;deleteProject(btn.getAttribute('data-delete-project'))});
-function deleteProject(id){const p=store.get('projects'),x=p.find(i=>String(i.id)===String(id));store.set('projects',p.filter(i=>String(i.id)!==String(id)));diskDeleteItem('projects',id);activity('Deleted project: '+(x?.name||''));renderProjects();updateCounts();toast('Project deleted')}
+function deleteProject(id){const p=store.get('projects'),x=p.find(i=>String(i.id)===String(id));if(!x)return;confirmDialog({title:'Move to Recycle Bin?',message:'"'+x.name+'" will be moved to the Recycle Bin. You can restore it or delete it permanently from there.',confirmLabel:'Move to Recycle Bin',danger:true,onConfirm:()=>{store.set('projects',p.filter(i=>String(i.id)!==String(id)));addToTrash('projects',x);activity('Moved project to Recycle Bin: '+x.name);awardOnce('delete','projects:'+x.id,'Deleted project: '+x.name);renderProjects();updateCounts();toast('Project moved to Recycle Bin')}})}
 const starterTemplates={
- dashboard:{title:'Admin Dashboard Layout',lang:'HTML + CSS',code:`<div class="demo-shell"><header class="demo-nav"><b>A-DevTools</b><span>Dashboard · Projects · Settings</span></header><aside class="demo-side"><b>Workspace</b><a class="active">Dashboard</a><a>Projects</a><a>Snippets</a><a>Settings</a></aside><main class="demo-main"><span class="eyebrow">WORKSPACE</span><h1>Admin Dashboard</h1><p>Responsive starter layout.</p><div class="demo-stats"><article><b>24</b><span>Projects</span></article><article><b>18</b><span>Snippets</span></article><article><b>92%</b><span>Progress</span></article></div></main></div>\n<style>\nbody{margin:0;background:#f4f6f8;font:14px system-ui;color:#15171a}.demo-shell{min-height:100vh}.demo-nav{height:58px;background:#fff;border-bottom:1px solid #e2e5e8;display:flex;align-items:center;padding:0 22px;gap:25px}.demo-nav span{color:#68707a}.demo-side{position:absolute;top:58px;bottom:0;width:190px;background:#fff;border-right:1px solid #e2e5e8;padding:20px}.demo-side a,.demo-side b{display:block;padding:10px;border-radius:8px}.demo-side b{font-size:11px;text-transform:uppercase;color:#8a9198}.demo-side .active{background:#f1f3f5;font-weight:700}.demo-main{margin-left:230px;padding:38px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.12em;color:#737b83}.demo-main h1{font-size:34px;margin:8px 0}.demo-main p{color:#68707a}.demo-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:28px}.demo-stats article{background:#fff;border:1px solid #e2e5e8;border-radius:14px;padding:20px}.demo-stats b{font-size:28px;display:block}.demo-stats span{color:#68707a}@media(max-width:700px){.demo-side{position:static;width:auto;border-right:0}.demo-main{margin:0}.demo-stats{grid-template-columns:1fr}}\n</style>`},
+ dashboard:{title:'Admin Dashboard Layout',lang:'HTML + CSS',code:`<div class="demo-shell"><header class="demo-nav"><b>A-Code Playground</b><span>Dashboard · Projects · Settings</span></header><aside class="demo-side"><b>Workspace</b><a class="active">Dashboard</a><a>Projects</a><a>Snippets</a><a>Settings</a></aside><main class="demo-main"><span class="eyebrow">WORKSPACE</span><h1>Admin Dashboard</h1><p>Responsive starter layout.</p><div class="demo-stats"><article><b>24</b><span>Projects</span></article><article><b>18</b><span>Snippets</span></article><article><b>92%</b><span>Progress</span></article></div></main></div>\n<style>\nbody{margin:0;background:#f4f6f8;font:14px system-ui;color:#15171a}.demo-shell{min-height:100vh}.demo-nav{height:58px;background:#fff;border-bottom:1px solid #e2e5e8;display:flex;align-items:center;padding:0 22px;gap:25px}.demo-nav span{color:#68707a}.demo-side{position:absolute;top:58px;bottom:0;width:190px;background:#fff;border-right:1px solid #e2e5e8;padding:20px}.demo-side a,.demo-side b{display:block;padding:10px;border-radius:8px}.demo-side b{font-size:11px;text-transform:uppercase;color:#8a9198}.demo-side .active{background:#f1f3f5;font-weight:700}.demo-main{margin-left:230px;padding:38px}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.12em;color:#737b83}.demo-main h1{font-size:34px;margin:8px 0}.demo-main p{color:#68707a}.demo-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:28px}.demo-stats article{background:#fff;border:1px solid #e2e5e8;border-radius:14px;padding:20px}.demo-stats b{font-size:28px;display:block}.demo-stats span{color:#68707a}@media(max-width:700px){.demo-side{position:static;width:auto;border-right:0}.demo-main{margin:0}.demo-stats{grid-template-columns:1fr}}\n</style>`},
  landing:{title:'Responsive Landing Page',lang:'HTML + CSS',code:`<header class="demo-nav"><b>Launch</b><nav><a href="#features">Features</a><a href="#about">About</a><a href="#contact">Contact</a></nav></header><main><section class="demo-hero"><span>NEW · DEV DESK STARTER</span><h1>Build something people remember.</h1><p>A polished landing page starter with responsive cards and a strong call to action.</p><button>Get started</button></section><section id="features" class="demo-cards"><article><b>Fast</b><p>Lightweight native HTML and CSS.</p></article><article><b>Responsive</b><p>Adapts to phones, tablets and desktops.</p></article><article><b>Reusable</b><p>Simple structure you can copy and extend.</p></article></section></main><style>body{margin:0;background:#f7f8fa;color:#15171a;font:14px system-ui}.demo-nav{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 7%;background:#fff;border-bottom:1px solid #e4e7ea}.demo-nav nav{display:flex;gap:20px}.demo-nav a{color:#68707a;text-decoration:none}.demo-hero{max-width:820px;margin:70px auto 30px;text-align:center;padding:0 20px}.demo-hero span{font-size:10px;font-weight:800;letter-spacing:.12em;color:#68707a}.demo-hero h1{font-size:clamp(38px,7vw,72px);line-height:.98;letter-spacing:-.06em;margin:14px 0}.demo-hero p{max-width:600px;margin:0 auto 24px;color:#68707a;line-height:1.7}.demo-hero button{border:0;background:#15171a;color:#fff;padding:13px 19px;border-radius:10px;font-weight:700}.demo-cards{max-width:1000px;margin:50px auto;padding:0 20px;display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.demo-cards article{background:#fff;border:1px solid #e4e7ea;border-radius:16px;padding:22px}.demo-cards p{color:#68707a;line-height:1.6}@media(max-width:650px){.demo-nav{padding:0 20px}.demo-nav nav{display:none}.demo-cards{grid-template-columns:1fr}}\n</style>`},
  form:{title:'Responsive Form Layout',lang:'HTML + CSS',code:`<form class="demo-form" onsubmit="event.preventDefault();document.getElementById('result').textContent='Saved successfully.'"><span class="eyebrow">PROJECT SETUP</span><h1>Create project</h1><label>Project name<input required placeholder="Client Portal"></label><label>Email<input required type="email" placeholder="you@example.com"></label><label>Project type<select><option>Website</option><option>Web application</option><option>Internal tool</option></select></label><button>Save project</button><strong id="result"></strong></form><style>body{margin:0;background:#f4f6f8;font:14px system-ui}.demo-form{max-width:480px;margin:50px auto;background:#fff;border:1px solid #e2e5e8;border-radius:18px;padding:28px;box-shadow:0 18px 50px #0000000d}.eyebrow{font-size:10px;font-weight:800;letter-spacing:.12em;color:#68707a}.demo-form h1{margin:7px 0 24px}.demo-form label{display:grid;gap:7px;font-weight:700;margin:15px 0}.demo-form input,.demo-form select{box-sizing:border-box;width:100%;padding:12px;border:1px solid #dfe3e7;border-radius:9px;font:inherit}.demo-form button{border:0;background:#15171a;color:#fff;padding:12px 17px;border-radius:9px;font-weight:700}.demo-form strong{display:block;margin-top:14px;color:#21864b}</style>`},
  table:{title:'Responsive Data Table',lang:'HTML + CSS',code:`<section class="table-wrap"><div class="table-head"><div><span>PROJECTS</span><h1>Recent work</h1></div><button>Export</button></div><div class="scroll"><table><thead><tr><th>Project</th><th>Owner</th><th>Status</th><th>Updated</th></tr></thead><tbody><tr><td>Client Portal</td><td>Admin</td><td><em>Active</em></td><td>Today</td></tr><tr><td>Billing System</td><td>Team</td><td><em>Review</em></td><td>Yesterday</td></tr><tr><td>Landing Page</td><td>Design</td><td><em>Draft</em></td><td>2 days ago</td></tr></tbody></table></div></section><style>body{margin:0;background:#f5f6f8;font:13px system-ui;color:#15171a}.table-wrap{margin:30px auto;max-width:850px;background:#fff;border:1px solid #e1e5e9;border-radius:16px;overflow:hidden}.table-head{display:flex;justify-content:space-between;align-items:center;padding:22px;border-bottom:1px solid #e1e5e9}.table-head span{font-size:10px;font-weight:800;color:#68707a}.table-head h1{margin:4px 0 0;font-size:24px}.table-head button{border:0;background:#15171a;color:#fff;padding:10px 14px;border-radius:8px}.scroll{overflow:auto}table{width:100%;min-width:620px;border-collapse:collapse}th,td{text-align:left;padding:14px 20px;border-bottom:1px solid #edf0f2}th{font-size:10px;text-transform:uppercase;color:#68707a;background:#fafbfc}em{font-style:normal;border:1px solid #dce1e5;border-radius:20px;padding:4px 8px;font-size:11px}</style>`},
@@ -265,8 +587,15 @@ let previewResizeTimer;
 window.addEventListener('resize',()=>{clearTimeout(previewResizeTimer);previewResizeTimer=setTimeout(renderStarterPreviews,150)});
 
 function savePlaygroundPayload(payload,title){
-  sessionStorage.setItem('adevtoolsPlayground',JSON.stringify(payload));
-  sessionStorage.setItem('adevtoolsPlaygroundTitle',title||'Snippet');
+  /* PHP can't run in the HTML/CSS/JS playground, so hand it to the PHP Playground instead. */
+  if(payload&&String(payload.lang||'').toUpperCase()==='PHP'){
+    sessionStorage.setItem('acodeplaygroundPhpPayload',JSON.stringify(payload));
+    sessionStorage.setItem('acodeplaygroundPhpPayloadTitle',title||'Snippet');
+    location.href='?page=php';
+    return;
+  }
+  sessionStorage.setItem('acodeplaygroundPlayground',JSON.stringify(payload));
+  sessionStorage.setItem('acodeplaygroundPlaygroundTitle',title||'Snippet');
   location.href='?page=code';
 }
 function runStarter(key){const t=starterTemplates[key];if(!t)return;bumpStarterRun(key);savePlaygroundPayload({code:t.code,lang:t.lang},t.title)}
@@ -282,7 +611,7 @@ function bumpStarterRun(key){
   store.set('starterRunCounts',counts);
   renderStarterRanking();
   renderPlaygroundLeaderboard();
-  awardPoints(3,'Ran starter: '+(starterTemplates[key]?.title||key));
+  awardOnce('run-starter',key,'Ran starter: '+(starterTemplates[key]?.title||key));
 }
 function bumpSnippetRun(id){
   const list=store.get('snippets'),x=list.find(i=>String(i.id)===String(id));
@@ -292,7 +621,7 @@ function bumpSnippetRun(id){
   diskSaveItem('snippets',x);
   renderSnippets();
   renderPlaygroundLeaderboard();
-  awardPoints(3,'Ran snippet: '+x.title);
+  awardOnce('run-snippet',x.id+'\u0000'+xpNorm(x.code),'Ran snippet: '+x.title);
 }
 function computeLeaderboard(){
   const starterCounts=store.get('starterRunCounts',{});
@@ -339,7 +668,7 @@ const SAMPLE_SNIPPETS=[
 .centre-grid{display:grid;place-items:center;min-height:100vh}
 .centre-flex{display:flex;align-items:center;justify-content:center;min-height:100vh}
 .centre-abs{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}`},
-  {id:'sample-sticky-header',title:'Sticky Header on Scroll',lang:'HTML + CSS + JS',code:`<header id="bar"><b>A-DevTools</b><nav><a href="#">Docs</a><a href="#">Pricing</a></nav></header><main><p>Scroll down — the header gets a shadow once you leave the top.</p></main><style>body{margin:0;font:15px system-ui}#bar{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:18px 24px;background:#fff;transition:padding .2s,box-shadow .2s}#bar.small{padding:11px 24px;box-shadow:0 6px 20px rgba(0,0,0,.09)}nav a{margin-left:16px;color:#555;text-decoration:none}main{height:200vh;padding:40px 24px}</style><script>addEventListener('scroll',function(){document.getElementById('bar').classList.toggle('small',scrollY>32)});<\/script>`},
+  {id:'sample-sticky-header',title:'Sticky Header on Scroll',lang:'HTML + CSS + JS',code:`<header id="bar"><b>A-Code Playground</b><nav><a href="#">Docs</a><a href="#">Pricing</a></nav></header><main><p>Scroll down — the header gets a shadow once you leave the top.</p></main><style>body{margin:0;font:15px system-ui}#bar{position:sticky;top:0;display:flex;justify-content:space-between;align-items:center;padding:18px 24px;background:#fff;transition:padding .2s,box-shadow .2s}#bar.small{padding:11px 24px;box-shadow:0 6px 20px rgba(0,0,0,.09)}nav a{margin-left:16px;color:#555;text-decoration:none}main{height:200vh;padding:40px 24px}</style><script>addEventListener('scroll',function(){document.getElementById('bar').classList.toggle('small',scrollY>32)});<\/script>`},
   {id:'sample-form-validate',title:'Form Validation',lang:'HTML + JS',code:`<form id="f" novalidate><label>Email<input name="email" type="email" required></label><label>Password<input name="pw" type="password" minlength="8" required></label><button>Create account</button><p id="msg"></p></form><style>body{font:14px system-ui;padding:24px}label{display:block;margin-bottom:14px}input{display:block;width:100%;max-width:300px;padding:9px;margin-top:5px;border:1px solid #ccc;border-radius:8px}input:invalid.touched{border-color:#c0392b}button{padding:10px 16px;border-radius:8px;border:0;background:#111;color:#fff}#msg{color:#2d8a42}</style><script>
 var f=document.getElementById('f');
 f.addEventListener('submit',function(e){
@@ -484,7 +813,7 @@ var body=document.querySelector('#t tbody');
   {id:'sample-php-pdo',title:'PHP: Safe PDO Query',lang:'PHP',code:`<?php
 // Prepared statements are the whole defence against SQL injection.
 $pdo = new PDO(
-    'mysql:host=localhost;dbname=a_devtools;charset=utf8mb4',
+    'mysql:host=localhost;dbname=a_codeplayground;charset=utf8mb4',
     $user,
     $pass,
     [
@@ -582,16 +911,53 @@ function ensureSampleSnippets(){
 }
 function snippetForm(editId){
   const list=store.get('snippets'),item=editId?list.find(x=>String(x.id)===String(editId)):null;
-  openModal(`<h2>${item?'Edit':'Add'} Snippet</h2><p class="modal-subtitle">Save reusable code and run it directly from your library.</p><div class="form-grid"><label>Title<input id="sTitle" class="input" value="${escapeAttr(item?.title||'')}" placeholder="Responsive card"></label><label>Language<select id="sLang" class="input"><option>HTML + CSS</option><option>HTML + JS</option><option>HTML + CSS + JS</option><option>CSS</option><option>JavaScript</option></select></label><label class="full">Code<textarea id="sCode" class="modal-code" rows="15" placeholder="Paste runnable code here">${escapeHtml(item?.code||'')}</textarea></label></div><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveSnippet"><i class="bx bx-save"></i> ${item?'Update':'Save'} Snippet</button></div>`);
+  // Components are saved into the same list as plain snippets (see
+  // snippetSource()), so an edit dialog opened from Saved Components
+  // should still read "Edit Component" rather than a generic "Snippet".
+  const isComp=item?snippetSource(item)==='component':false;
+  const noun=isComp?'Component':'Snippet';
+  openModal(`<h2>${item?'Edit':'Add'} ${noun}</h2><p class="modal-subtitle">Save reusable code and run it directly from your library.</p><div class="form-grid"><label>Title<input id="sTitle" class="input" value="${escapeAttr(item?.title||'')}" placeholder="Responsive card"></label><label>Language<select id="sLang" class="input"><option>HTML + CSS</option><option>HTML + JS</option><option>HTML + CSS + JS</option><option>CSS</option><option>JavaScript</option></select></label><label class="full">Code<textarea id="sCode" class="modal-code" rows="15" placeholder="Paste runnable code here">${escapeHtml(item?.code||'')}</textarea></label></div><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveSnippet"><i class="bx bx-save"></i> ${item?'Update':'Save'} ${noun}</button></div>`);
   if(item)$('#sLang').value=item.lang;
-  $('#saveSnippet').onclick=()=>{const title=$('#sTitle').value.trim()||'Untitled Snippet',lang=$('#sLang').value,code=$('#sCode').value;if(!code.trim()){toast('Add some code first');$('#sCode').focus();return}if(item){item.title=title;item.lang=lang;item.code=code;item.updatedAt=Date.now();store.set('snippets',list);diskSaveItem('snippets',item);awardPoints(3,'Updated snippet: '+title)}else{const newSnippet={id:Date.now(),title,lang,code,source:'snippet',createdAt:Date.now()};list.unshift(newSnippet);store.set('snippets',list);diskSaveItem('snippets',newSnippet);awardPoints(10,'Saved snippet: '+title);markGs('savedSnippet')}closeModal();renderSnippets();updateCounts();toast(item?'Snippet updated':'Snippet saved to your local drive')};
+  $('#saveSnippet').onclick=()=>{const title=$('#sTitle').value.trim()||'Untitled '+noun,lang=$('#sLang').value,code=$('#sCode').value;if(!code.trim()){toast('Add some code first');$('#sCode').focus();return}const fp=xpFp('snippet',title,lang,code);if(item&&xpFp('snippet',item.title,item.lang,item.code)===fp){closeModal();toast('No changes to save');return}if(item){item.title=title;item.lang=lang;item.code=code;item.updatedAt=Date.now();store.set('snippets',list);diskSaveItem('snippets',item);awardOnce('snippet',fp,'Updated '+noun.toLowerCase()+': '+title)}else{const newSnippet={id:Date.now(),title,lang,code,source:'snippet',createdAt:Date.now()};list.unshift(newSnippet);store.set('snippets',list);diskSaveItem('snippets',newSnippet);awardOnce('snippet',fp,'Saved snippet: '+title);markGs('savedSnippet')}closeModal();renderSnippets();updateCounts();toast(item?noun+' updated':'Snippet saved to your local drive')};
 }
 $('#addSnippet')?.addEventListener('click',()=>snippetForm());
 
-function copySnippet(id){const x=store.get('snippets').find(i=>String(i.id)===String(id));if(!x)return;const done=()=>{awardPoints(2,'Copied snippet: '+x.title);toast('Snippet copied')};if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(x.code).then(done).catch(()=>fallbackCopy(x.code,done));else fallbackCopy(x.code,done)}
+function copySnippet(id){const x=store.get('snippets').find(i=>String(i.id)===String(id));if(!x)return;const text=formatCombinedCode(x.code,x.lang);const done=()=>{awardOnce('copy-snippet',x.id+'\u0000'+xpNorm(x.code),'Copied snippet: '+x.title);toast('Snippet copied')};if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));else fallbackCopy(text,done)}
 function fallbackCopy(text,done){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done()}finally{ta.remove()}}
-function deleteSnippet(id){const list=store.get('snippets'),x=list.find(i=>String(i.id)===String(id));if(!x)return;if(!confirm('Delete this snippet?'))return;store.set('snippets',list.filter(i=>String(i.id)!==String(id)));diskDeleteItem('snippets',id);activity('Deleted snippet: '+x.title);renderSnippets();updateCounts();toast('Snippet deleted')}
-function previewSnippet(id){const x=store.get('snippets').find(i=>String(i.id)===String(id));if(!x)return;markGs('viewedSnippet');openModal(`<div class="modal-preview-head"><div><span class="section-kicker">${escapeHtml(x.lang)}</span><h2>${escapeHtml(x.title)}</h2></div><button class="primary-btn" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run in Playground</button></div>${buildCodePreviewMarkup(x.code)}<div class="modal-footer"><button class="ghost-btn" data-close-modal>Close</button><button class="primary-btn" data-copy-preview="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy code</button></div>`)}
+function deleteSnippet(id){const list=store.get('snippets'),x=list.find(i=>String(i.id)===String(id));if(!x)return;const label=snippetSource(x)==='component'?'Component':'Snippet';confirmDialog({title:'Move to Recycle Bin?',message:'"'+x.title+'" will be moved to the Recycle Bin. You can restore it or delete it permanently from there.',confirmLabel:'Move to Recycle Bin',danger:true,onConfirm:()=>{store.set('snippets',list.filter(i=>String(i.id)!==String(id)));addToTrash('snippets',x);activity('Moved '+label.toLowerCase()+' to Recycle Bin: '+x.title);awardOnce('delete','snippets:'+x.id,'Deleted '+label.toLowerCase()+': '+x.title);renderSnippets();updateCounts();toast(label+' moved to Recycle Bin')}})}
+/* Live-preview stage markup + mounting, shared by the Saved Components grid
+   and the component Preview modal. A saved component's code already has its
+   design-token styles baked in (see components.js: portable()), so it just
+   needs to run in a sandboxed iframe — no extra wrapping required. */
+function liveStageMarkup(height,extraClass){return `<div class="cmp-stage${extraClass?' '+extraClass:''}" style="height:${height||190}px"><div class="cmp-loading"><span></span></div></div>`}
+function mountLiveStage(stage,code,title){
+  if(!stage||stage.querySelector('iframe'))return;
+  const f=document.createElement('iframe');
+  f.className='cmp-frame';
+  f.setAttribute('title',(title||'Component')+' live preview');
+  f.setAttribute('loading','lazy');
+  f.addEventListener('load',()=>stage.classList.add('ready'));
+  f.srcdoc=code;
+  stage.appendChild(f);
+}
+function mountLiveStages(container){
+  if(!container)return;
+  container.querySelectorAll('.cmp-stage').forEach(stage=>{
+    const card=stage.closest('[data-id]');if(!card)return;
+    const x=store.get('snippets').find(i=>String(i.id)===String(card.dataset.id));
+    if(x)mountLiveStage(stage,x.code,x.title);
+  });
+}
+function previewSnippet(id){
+  const x=store.get('snippets').find(i=>String(i.id)===String(id));if(!x)return;
+  markGs('viewedSnippet');
+  if(snippetSource(x)==='component'){
+    openModal(`<div class="modal-preview-head"><div><span class="section-kicker">${escapeHtml(x.lang)}</span><h2>${escapeHtml(x.title)}</h2></div><button class="primary-btn" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run in Playground</button></div>${liveStageMarkup('56vh','cmp-stage-modal')}<div class="modal-footer"><button class="ghost-btn" data-close-modal>Close</button><button class="primary-btn" data-copy-preview="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy code</button></div>`,'modal-code-view');
+    mountLiveStage(modalBody.querySelector('.cmp-stage-modal'),x.code,x.title);
+  }else{
+    openModal(`<div class="modal-preview-head"><div><span class="section-kicker">${escapeHtml(x.lang)}</span><h2>${escapeHtml(x.title)}</h2></div><button class="primary-btn" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run in Playground</button></div>${buildCodePreviewMarkup(x.code)}<div class="modal-footer"><button class="ghost-btn" data-close-modal>Close</button><button class="primary-btn" data-copy-preview="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy code</button></div>`);
+  }
+}
 /* Saved Snippets and Saved Components each have their own page and grid
    now (no more shared "Your Library" panel with tabs). Components saved
    from the UI Components page (components.js) are still written into this
@@ -607,6 +973,7 @@ function snippetSource(x){return x.source||(String(x.id).indexOf('component-')==
 function snippetCategory(x){return x.category||(snippetSource(x)==='component'?'Other':(x.lang||'Other'))}
 function renderSavedGrid(source,ids,emptyMsg){
   const el=$('#'+ids.grid);if(!el)return;
+  const isComp=source==='component';
   const list=store.get('snippets').filter(x=>snippetSource(x)===source);
   const q=($('#'+ids.search)?.value||'').trim().toLowerCase(),filter=$('#'+ids.filter)?.value||'all',sort=$('#'+ids.sort)?.value||'recent';
   const pageCount=$('#'+ids.pageCount);if(pageCount)pageCount.textContent=list.length;
@@ -616,7 +983,21 @@ function renderSavedGrid(source,ids,emptyMsg){
   const groups=[],groupIndex={};
   filtered.forEach(x=>{const cat=snippetCategory(x);if(!(cat in groupIndex)){groupIndex[cat]=groups.length;groups.push({cat,items:[]})}groups[groupIndex[cat]].items.push(x)});
   groups.sort((a,b)=>a.cat.localeCompare(b.cat));
-  el.innerHTML=groups.map(g=>'<div class="snippet-cat-group"><div class="snippet-cat-heading">'+escapeHtml(g.cat)+' <span class="count-pill">'+g.items.length+'</span></div><div class="snippet-grid">'+g.items.map((x,i)=>{const rank=sort==='popular'&&(x.runCount||0)>0&&i<3?i+1:0;return `<article class="snippet-card"><div class="snippet-card-top"><div>${rank?`<span class="rank-badge rank-${rank}">#${rank} Most Run</span>`:''}<span class="tag">${escapeHtml(x.lang)}</span><div class="card-title">${escapeHtml(x.title)}</div></div><span class="snippet-live"><i></i> Runnable</span></div><pre class="code-mini">${escapeHtml(x.code)}</pre><div class="card-actions"><div class="action-left"><button class="small-btn run-snippet" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run</button><button class="small-btn" data-copy-snippet="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy</button><button class="small-btn" data-preview-snippet="${escapeAttr(x.id)}"><i class="bx bx-show"></i> Preview</button></div><div class="action-right"><button class="small-btn" data-edit-snippet="${escapeAttr(x.id)}"><i class="bx bx-edit"></i></button><button class="small-btn" data-delete-snippet="${escapeAttr(x.id)}"><i class="bx bx-trash"></i></button></div></div><div class="muted snippet-runs">${x.runCount||0} run${(x.runCount||0)===1?'':'s'}</div></article>`}).join('')+'</div></div>').join('');
+  // Saved snippets show a read-only code preview (how the pattern is
+  // written); saved components show a live sandboxed preview instead
+  // (how the pattern actually looks/behaves) — the same live-preview
+  // treatment the UI Components library page uses for its own cards.
+  el.innerHTML=groups.map(g=>'<div class="snippet-cat-group"><div class="snippet-cat-heading">'+escapeHtml(g.cat)+' <span class="count-pill">'+g.items.length+'</span></div><div class="snippet-grid">'+g.items.map((x,i)=>{const rank=sort==='popular'&&(x.runCount||0)>0&&i<3?i+1:0;const stage=isComp?liveStageMarkup(190):buildCodePreviewMarkup(x.code,'preview-code-card');const previewLabel=isComp?'Live Preview':'Preview';const previewIcon=isComp?'bx-slideshow':'bx-show';return `<article class="snippet-card${isComp?' cmp-live-card':''}" data-id="${escapeAttr(x.id)}"><div class="snippet-card-top"><div>${rank?`<span class="rank-badge rank-${rank}">#${rank} Most Run</span>`:''}<span class="tag">${escapeHtml(x.lang)}</span><div class="card-title">${escapeHtml(x.title)}</div></div><span class="snippet-live"><i></i> Runnable</span></div>${stage}<div class="card-actions"><div class="action-left"><button class="small-btn run-snippet" data-run-snippet="${escapeAttr(x.id)}"><i class="bx bx-play"></i> Run</button><button class="small-btn" data-copy-snippet="${escapeAttr(x.id)}"><i class="bx bx-copy"></i> Copy</button><button class="small-btn" data-preview-snippet="${escapeAttr(x.id)}"><i class="bx ${previewIcon}"></i> ${previewLabel}</button></div><div class="action-right"><button class="small-btn" data-edit-snippet="${escapeAttr(x.id)}"><i class="bx bx-edit"></i></button><button class="small-btn" data-delete-snippet="${escapeAttr(x.id)}"><i class="bx bx-trash"></i></button></div></div><div class="muted snippet-runs">${x.runCount||0} run${(x.runCount||0)===1?'':'s'}</div></article>`}).join('')+'</div></div>').join('');
+  if(isComp){
+    // Live iframes mount after insertion, same lazy pattern as the
+    // Components library page.
+    mountLiveStages(el);
+  }else{
+    // Cards render at their final size straight away (no hidden modal to
+    // wait on), so the active tab's CodeMirror can mount immediately —
+    // same lazy-mount helper the Preview modal uses.
+    el.querySelectorAll('.code-mini-editor.active').forEach(mountCodeEditor);
+  }
 }
 const SAVED_SNIPPETS_IDS={grid:'savedSnippetsGrid',search:'savedSnippetsSearch',filter:'savedSnippetsFilter',sort:'savedSnippetsSort',pageCount:'savedSnippetsPageCount'};
 const SAVED_COMPONENTS_IDS={grid:'savedComponentsGrid',search:'savedComponentsSearch',filter:'savedComponentsFilter',sort:'savedComponentsSort',pageCount:'savedComponentsPageCount'};
@@ -628,6 +1009,7 @@ function renderSavedComponents(){renderSavedGrid('component',SAVED_COMPONENTS_ID
    on the current page. */
 function renderSnippets(){renderSavedSnippets();renderSavedComponents()}
 function handleSavedGridClick(e){
+  const pTab=e.target.closest('[data-preview-tab]');if(pTab){switchPreviewTab(pTab);return}
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.runSnippet){const x=store.get('snippets').find(i=>String(i.id)===String(b.dataset.runSnippet));if(x){bumpSnippetRun(x.id);savePlaygroundPayload({code:x.code,lang:x.lang},x.title)}}
   else if(b.dataset.copySnippet)copySnippet(b.dataset.copySnippet);
@@ -651,7 +1033,7 @@ function saveStarterToLibrary(key){
   list.unshift(item);
   store.set('snippets',list);
   diskSaveItem('snippets',item);
-  awardPoints(8,'Saved starter: '+t.title);
+  awardOnce('snippet',xpFp('snippet',t.title,t.lang,t.code),'Saved starter: '+t.title);
   markGs('savedSnippet');
   renderSnippets();updateCounts();
   toast(t.title+' saved to Snippets');
@@ -671,28 +1053,59 @@ modal?.addEventListener('click',e=>{
   const run=e.target.closest('[data-run-template]');if(run)runStarter(run.dataset.runTemplate);
   const runSnippetBtn=e.target.closest('[data-run-snippet]');if(runSnippetBtn){const x=store.get('snippets').find(i=>String(i.id)===String(runSnippetBtn.dataset.runSnippet));if(x){bumpSnippetRun(x.id);savePlaygroundPayload({code:x.code,lang:x.lang},x.title)}}
   const copyPrev=e.target.closest('[data-copy-preview]');if(copyPrev)copySnippet(copyPrev.dataset.copyPreview);
-  const pTab=e.target.closest('[data-preview-tab]');
-  if(pTab){
-    const frame=pTab.closest('.preview-code-frame');if(!frame)return;
-    frame.querySelectorAll('[data-preview-tab]').forEach(b=>b.classList.remove('active'));
-    pTab.classList.add('active');
-    const key=pTab.dataset.previewTab;
-    frame.querySelectorAll('[data-preview-panel]').forEach(p=>{
-      const isActive=p.dataset.previewPanel===key;
-      p.classList.toggle('active',isActive);
-      if(isActive){mountCodeEditor(p);if(p._cm)requestAnimationFrame(()=>p._cm.refresh())}
-    });
-  }
+  const pTab=e.target.closest('[data-preview-tab]');if(pTab)switchPreviewTab(pTab);
 });
+/* Switches the active HTML/CSS/JS tab inside a .preview-code-frame (built
+   by buildCodePreviewMarkup) and lazily mounts that panel's CodeMirror
+   instance the first time it becomes visible. Shared by the Preview modal
+   and the inline mini-previews on the Saved Snippets/Components cards. */
+function switchPreviewTab(pTab){
+  const frame=pTab.closest('.preview-code-frame');if(!frame)return;
+  frame.querySelectorAll('[data-preview-tab]').forEach(b=>b.classList.remove('active'));
+  pTab.classList.add('active');
+  const key=pTab.dataset.previewTab;
+  frame.querySelectorAll('[data-preview-panel]').forEach(p=>{
+    const isActive=p.dataset.previewPanel===key;
+    p.classList.toggle('active',isActive);
+    if(isActive){mountCodeEditor(p);if(p._cm)requestAnimationFrame(()=>p._cm.refresh())}
+  });
+}
+/* Languages offered in the Note editor's mode switcher, mapped to the
+   CodeMirror mode string. Only modes already loaded app-wide (see the
+   <script> tags in index.php) are listed; "Plain text" uses mode:null so
+   it stays a normal distraction-free editor with no highlighting. */
+const NOTE_LANGUAGES=[
+  {v:'plain',label:'Plain text',icon:'bx-text',mode:null},
+  {v:'markdown',label:'Markdown',icon:'bx-markdown',mode:null},
+  {v:'php',label:'PHP',icon:'bx-code-alt',mode:'application/x-httpd-php'},
+  {v:'javascript',label:'JavaScript',icon:'bx-code-curly',mode:'javascript'},
+  {v:'htmlmixed',label:'HTML',icon:'bx-code-block',mode:'htmlmixed'},
+  {v:'css',label:'CSS',icon:'bx-palette',mode:'css'},
+  {v:'sql',label:'SQL',icon:'bx-data',mode:'text/x-sql'}
+];
+function noteLangMeta(v){return NOTE_LANGUAGES.find(l=>l.v===v)||NOTE_LANGUAGES[0]}
 function noteForm(editId){
   const n=store.get('notes'),item=editId?n.find(x=>String(x.id)===String(editId)):null;
-  openModal(`<h2>${item?'Edit':'New'} Note</h2><p class="modal-subtitle">${item?'Update this technical reference or decision.':'Capture a short technical reference or development decision.'}</p><label>Title<input id="nTitle" class="input" value="${escapeAttr(item?.title||'')}" placeholder="PHP routing notes"></label><label>Note<textarea id="nText" class="input" rows="8" placeholder="Write your development notes...">${escapeHtml(item?.text||'')}</textarea></label><div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveNote"><i class="bx bx-save"></i> ${item?'Update':'Save'} Note</button></div>`);
-  $('#saveNote').onclick=()=>{const title=$('#nTitle').value.trim()||'Untitled Note',text=$('#nText').value.trim();if(item){item.title=title;item.text=text;item.updatedAt=Date.now();store.set('notes',n);diskSaveItem('notes',item);awardPoints(2,'Updated note: '+title)}else{const newNote={id:Date.now(),title,text,createdAt:Date.now()};n.unshift(newNote);store.set('notes',n);diskSaveItem('notes',newNote);awardPoints(5,'Created note: '+title)}closeModal();renderNotes();updateCounts();toast(item?'Note updated on your local drive':'Note saved to your local drive')}
+  const curLang=item?.lang||'plain';
+  openModal(`<h2>${item?'Edit':'New'} Note</h2><p class="modal-subtitle">${item?'Update this technical reference or decision.':'Capture a short technical reference or development decision.'}</p>`+
+`<label>Title<div class="field-group"><i class="bx bx-bookmark field-icon"></i><input id="nTitle" class="input has-icon" value="${escapeAttr(item?.title||'')}" placeholder="PHP routing notes"></div></label>`+
+`<div class="note-editor-toolbar"><div class="field-group field-select-wrap"><i class="bx bx-code-curly field-icon"></i><select id="nLang" class="input has-icon note-lang-select">${NOTE_LANGUAGES.map(l=>`<option value="${l.v}"${curLang===l.v?' selected':''}>${l.label}</option>`).join('')}</select></div><span class="note-editor-hint"><i class="bx bx-info-circle"></i> Syntax highlighting updates live</span></div>`+
+`<div class="note-code-editor" id="nCodeWrap"><textarea id="nText">${escapeHtml(item?.text||'')}</textarea></div>`+
+`<div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveNote"><i class="bx bx-save"></i> ${item?'Update':'Save'} Note</button></div>`);
+  const nTextEl=$('#nText');
+  activeNoteCm=null;
+  if(nTextEl&&typeof CodeMirror!=='undefined'){
+    activeNoteCm=CodeMirror.fromTextArea(nTextEl,{value:nTextEl.value,mode:noteLangMeta(curLang).mode,theme:cmThemeName(),lineNumbers:true,lineWrapping:true,tabSize:2,indentUnit:2,matchBrackets:true,autoCloseBrackets:true,styleActiveLine:true,viewportMargin:Infinity,placeholder:'Write your development notes...'});
+    setTimeout(()=>activeNoteCm&&activeNoteCm.refresh(),30);
+  }
+  $('#nLang')?.addEventListener('change',e=>{if(activeNoteCm)activeNoteCm.setOption('mode',noteLangMeta(e.target.value).mode)});
+  $('#saveNote').onclick=()=>{const title=$('#nTitle').value.trim()||'Untitled Note',text=(activeNoteCm?activeNoteCm.getValue():nTextEl.value).trim(),lang=$('#nLang').value;const fp=xpFp('note',title,lang,text);if(item&&xpFp('note',item.title,item.lang,item.text)===fp){closeModal();toast('No changes to save');return}if(item){item.title=title;item.text=text;item.lang=lang;item.updatedAt=Date.now();store.set('notes',n);diskSaveItem('notes',item);awardOnce('note',fp,'Updated note: '+title)}else{const newNote={id:Date.now(),title,text,lang,createdAt:Date.now()};n.unshift(newNote);store.set('notes',n);diskSaveItem('notes',newNote);awardOnce('note',fp,'Created note: '+title)}closeModal();renderNotes();updateCounts();toast(item?'Note updated on your local drive':'Note saved to your local drive')}
 }
 $('#addNote')?.addEventListener('click',()=>noteForm());
-function renderNotes(){const el=$('#noteGrid');if(!el)return;const n=store.get('notes');el.innerHTML=n.length?n.map(x=>`<article class="note-card"><div class="card-title">${escapeHtml(x.title)}</div><p>${escapeHtml(x.text)}</p><div class="card-actions"><button class="small-btn" data-edit-note="${escapeAttr(x.id)}"><i class="bx bx-edit"></i> Edit</button><button class="small-btn" data-delete-note="${escapeAttr(x.id)}"><i class="bx bx-trash"></i> Delete</button></div></article>`).join(''):'<div class="empty">No notes yet.</div>'}
-$('#noteGrid')?.addEventListener('click',e=>{const editBtn=e.target.closest('[data-edit-note]');if(editBtn){noteForm(editBtn.getAttribute('data-edit-note'));return}const b=e.target.closest('[data-delete-note]');if(!b)return;const id=b.dataset.deleteNote;const list=store.get('notes'),x=list.find(i=>String(i.id)===String(id));store.set('notes',list.filter(i=>String(i.id)!==String(id)));diskDeleteItem('notes',id);activity('Deleted note: '+(x?.title||''));renderNotes();updateCounts();toast('Note deleted')});
-function updateCounts(){const el=$('#projectCount');if(el)el.textContent=store.get('projects').length;const noteEl=$('#noteCount');if(noteEl)noteEl.textContent=store.get('notes').length;const list=store.get('snippets');const snippetOnly=list.filter(x=>snippetSource(x)==='snippet').length,componentOnly=list.filter(x=>snippetSource(x)==='component').length;const snipEl=$('#snippetCount');if(snipEl)snipEl.textContent=snippetOnly;const sideSnip=$('#sidebarSnippetCount'),sideComp=$('#sidebarComponentCount');if(sideSnip)sideSnip.textContent=snippetOnly;if(sideComp)sideComp.textContent=componentOnly}
+function renderNotes(){const el=$('#noteGrid');if(!el)return;const n=store.get('notes');el.innerHTML=n.length?n.map(x=>{const lm=noteLangMeta(x.lang);return `<article class="note-card"><div class="project-card-top"><div class="card-title">${escapeHtml(x.title)}</div><span class="status-badge status-progress"><i class="bx ${lm.icon}"></i>${lm.label}</span></div><p>${escapeHtml(x.text)}</p><div class="card-actions"><button class="small-btn" data-edit-note="${escapeAttr(x.id)}"><i class="bx bx-edit"></i> Edit</button><button class="small-btn" data-delete-note="${escapeAttr(x.id)}"><i class="bx bx-trash"></i> Delete</button></div></article>`}).join(''):'<div class="empty">No notes yet.</div>'}
+$('#noteGrid')?.addEventListener('click',e=>{const editBtn=e.target.closest('[data-edit-note]');if(editBtn){noteForm(editBtn.getAttribute('data-edit-note'));return}const b=e.target.closest('[data-delete-note]');if(!b)return;deleteNote(b.dataset.deleteNote)});
+function deleteNote(id){const list=store.get('notes'),x=list.find(i=>String(i.id)===String(id));if(!x)return;confirmDialog({title:'Move to Recycle Bin?',message:'"'+x.title+'" will be moved to the Recycle Bin. You can restore it or delete it permanently from there.',confirmLabel:'Move to Recycle Bin',danger:true,onConfirm:()=>{store.set('notes',list.filter(i=>String(i.id)!==String(id)));addToTrash('notes',x);activity('Moved note to Recycle Bin: '+x.title);awardOnce('delete','notes:'+x.id,'Deleted note: '+x.title);renderNotes();updateCounts();toast('Note moved to Recycle Bin')}})}
+function updateCounts(){const el=$('#projectCount');if(el)el.textContent=store.get('projects').length;const noteEl=$('#noteCount');if(noteEl)noteEl.textContent=store.get('notes').length;const list=store.get('snippets');const snippetOnly=list.filter(x=>snippetSource(x)==='snippet').length,componentOnly=list.filter(x=>snippetSource(x)==='component').length;const snipEl=$('#snippetCount');if(snipEl)snipEl.textContent=snippetOnly;const sideSnip=$('#sidebarSnippetCount'),sideComp=$('#sidebarComponentCount');if(sideSnip)sideSnip.textContent=snippetOnly;if(sideComp)sideComp.textContent=componentOnly;updateTrashCount()}
 /* --- Daily Bonus + Rank ----------------------------------------------------
    Points are no longer earned passively by every click — that lived in the
    navbar as a running counter and it wasn't the intent. Instead, once per
@@ -705,8 +1118,29 @@ function updateCounts(){const el=$('#projectCount');if(el)el.textContent=store.g
    an exam...) earns XP through awardPoints(). XP accumulates into a
    Rank via RANKS below, which is the game's "level" ladder. A once-daily
    login bonus (with a streak multiplier) also feeds the same pool. */
-function todayKey(){return new Date().toISOString().slice(0,10)}
-function yesterdayKey(){return new Date(Date.now()-86400000).toISOString().slice(0,10)}
+/* --- Trusted (server) clock ------------------------------------------
+   The daily claim is about the SERVER's calendar date, not whatever the
+   device says. index.php prints window.SERVER_CLOCK ({now, offset}); from
+   then on "now" = that server time + time elapsed on the browser's
+   monotonic performance.now() timer, which — unlike Date.now() — does not
+   move when someone changes the system date/time. The base is refreshed
+   from the server whenever the tab regains focus (a sleeping laptop pauses
+   performance.now()). The server re-checks everything on claim anyway;
+   this just keeps what the UI shows (claim button, streak calendar) from
+   being fooled by a backdated or forward-dated device clock. */
+const SERVER_CLOCK=(typeof window!=='undefined'&&window.SERVER_CLOCK)?window.SERVER_CLOCK:null;
+const hasPerfClock=(typeof performance!=='undefined'&&typeof performance.now==='function');
+let clockBase=SERVER_CLOCK&&typeof SERVER_CLOCK.now==='number'?{ms:SERVER_CLOCK.now,off:(SERVER_CLOCK.offset||0)*1000,perf:hasPerfClock?performance.now():0}:null;
+function trustedNowMs(){
+  if(!clockBase)return Date.now();
+  return clockBase.ms+(hasPerfClock?performance.now()-clockBase.perf:0)+clockBase.off;
+}
+function setServerClock(c){
+  if(!c||typeof c.now!=='number')return;
+  clockBase={ms:c.now,off:(c.offset||0)*1000,perf:hasPerfClock?performance.now():0};
+}
+function todayKey(){return new Date(trustedNowMs()).toISOString().slice(0,10)}
+function yesterdayKey(){return new Date(trustedNowMs()-86400000).toISOString().slice(0,10)}
 /* --- Points now live in the database --------------------------------
    The `points` table (database/points-migration.sql) is the source of
    truth for XP/rank/streak, scoped to the account (see save-data.php).
@@ -736,9 +1170,47 @@ function addSessionXp(amount){if(!(amount>0))return;sessionStorage.setItem(userS
    pattern as diskSaveItem() for projects/snippets/notes: the local copy
    already updated for instant feedback, this just keeps the account's
    database row in sync. */
-function pointsSyncAward(amount){
-  if(!CSRF_TOKEN||!amount)return;
-  fetch(DISK_ENDPOINT+'?action=award-points',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({amount,csrf:CSRF_TOKEN})}).catch(()=>{});
+/* The server has the final say: it ignores any client-side amount, awards
+   the flat XP only for a whitelisted action kind it hasn't already
+   rewarded for this exact content, and enforces a burst limit and a daily
+   cap. Its answer carries the account's true total, which replaces the
+   optimistic local one — so a tampered/duplicate/over-limit award pops back
+   to the real number instead of sticking. Only the newest response is
+   applied so out-of-order replies can't roll the total backwards. */
+let pointsSyncSeq=0;
+function pointsSyncAward(kind,key){
+  if(!CSRF_TOKEN||!kind||!key)return;
+  const seq=++pointsSyncSeq;
+  /* If the server didn't record this award because of a rate/daily limit or
+     a network failure (as opposed to "already rewarded"), forget it locally
+     too, so the same action can still earn later instead of being blocked
+     forever by a ledger entry the server never saw. */
+  const forgetLocal=()=>{store.set('xpLedger',store.get('xpLedger',[]).filter(k=>k!==kind+':'+key))};
+  fetch(DISK_ENDPOINT+'?action=award-points',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,key,csrf:CSRF_TOKEN})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res&&res.limited)forgetLocal();
+      if(!res||seq!==pointsSyncSeq)return;
+      if(res.points){
+        const cur=getPointsState();
+        if(cur.total!==res.points.total||cur.streak!==res.points.streak||cur.lastClaimDate!==res.points.lastClaimDate){
+          store.set('points',{total:res.points.total,lastClaimDate:res.points.lastClaimDate,streak:res.points.streak});
+          renderPoints();
+        }
+      }
+      if(res.ok===false&&res.error)toast(res.error);
+    })
+    .catch(forgetLocal);
+}
+/* Pull the server's authoritative points + clock (on focus / periodically). */
+function resyncFromServer(){
+  if(!CSRF_TOKEN||document.hidden)return;
+  fetch(DISK_ENDPOINT+'?action=get-points').then(r=>r.json()).then(res=>{
+    if(!res||!res.ok)return;
+    setServerClock(res.clock);
+    if(res.points){store.set('points',{total:res.points.total,lastClaimDate:res.points.lastClaimDate,streak:res.points.streak})}
+    renderPoints();
+  }).catch(()=>{});
 }
 function dailyBonusAmount(streak){return Math.min(10+(Math.max(streak,1)-1)*2,30)}
 /* Extra "final benefits" reward stacked on top of the daily amount every
@@ -794,20 +1266,52 @@ function getRankProgress(total){
 }
 /* Central XP award. Every gamified action should route through this so
    the activity feed, XP bars and rank-up celebration all stay in sync. */
-function awardPoints(amount,reason){
+function awardPoints(amount,reason,sync){
   if(!amount)return;
   const before=getPointsState();
   const beforeRank=getRank(before.total);
   before.total=Math.max(0,before.total+amount);
   store.set('points',before);
   addSessionXp(amount);
-  pointsSyncAward(amount);
+  if(sync)pointsSyncAward(sync.kind,sync.key);
   activity(reason+' ('+(amount>0?'+':'')+amount+' XP)');
   renderPoints();
   const afterRank=getRank(before.total);
   if(amount>0){
     setTimeout(()=>queueRankUps(beforeRank,afterRank,before.total),380);
   }
+}
+/* --- Flat XP + change tracing ----------------------------------------
+   Every real action — creating, editing/renaming, deleting, running,
+   copying, saving a starter — earns the same small XP_ACTION, so a
+   "major" action is never worth more than a "minor" one. (The daily
+   claim bonus is a separate feature and keeps its own amounts.)
+   To stop XP being farmed, awardOnce() keeps a per-account ledger of
+   fingerprints (a hash of what the action produced). If the user
+   renames something to the name it already has, saves without changing
+   anything, deletes an item and recreates identical content, reverts to
+   an earlier version, or re-runs/copies the same code, the fingerprint
+   was already rewarded and nothing is earned. Restoring from the
+   Recycle Bin and emptying it earn nothing either: restore brings back
+   identical content, and the delete itself was already rewarded. */
+const XP_ACTION=2;
+const XP_LEDGER_MAX=4000;
+function xpHash(str){
+  let a=2166136261,b=5381;
+  for(let i=0;i<str.length;i++){const c=str.charCodeAt(i);a^=c;a=Math.imul(a,16777619);b=(Math.imul(b,33)^c)|0}
+  return (a>>>0).toString(36)+(b>>>0).toString(36)+str.length.toString(36);
+}
+function xpNorm(v){return String(v==null?'':v).replace(/\r\n?/g,'\n').trim()}
+function xpFp(){return xpHash(Array.prototype.map.call(arguments,xpNorm).join('\u0000'))}
+function awardOnce(kind,fingerprint,reason){
+  const h=xpHash(String(fingerprint));
+  const key=kind+':'+h;
+  const ledger=store.get('xpLedger',[]);
+  if(ledger.indexOf(key)!==-1)return false;
+  ledger.push(key);
+  store.set('xpLedger',ledger.length>XP_LEDGER_MAX?ledger.slice(-XP_LEDGER_MAX):ledger);
+  awardPoints(XP_ACTION,reason,{kind,key:h});
+  return true;
 }
 function rankSubBadge(rank){return rank.sub?'<span class="rank-sub-badge '+rank.cls+'">'+ROMAN[rank.sub]+'</span>':''}
 /* Rank-up modal queue -------------------------------------------------
@@ -879,29 +1383,20 @@ function showRankUpModal(rank,total){
 /* Applies today's claim purely locally — used when there's no session to
    check against the database (shouldn't normally happen on this page) or
    the request to claim-daily-bonus couldn't reach the server at all. */
-function claimDailyBonusLocal(){
-  const s=getPointsState();
-  if(s.lastClaimDate===todayKey()){toast('Already claimed today — come back tomorrow!');return}
-  s.streak=s.lastClaimDate===yesterdayKey()?(s.streak||0)+1:1;
-  const final=weeklyFinalBonus(s.streak),bonus=dailyBonusAmount(s.streak)+final;
-  s.lastClaimDate=todayKey();
-  store.set('points',s);
-  awardPoints(bonus,'Claimed daily bonus (streak '+s.streak+'d)'+(final?' + Day 7 final bonus':''));
-  toast(final?('Week complete! Final bonus claimed: +'+bonus+' XP!'):('Daily bonus claimed: +'+bonus+' XP!'));
-}
 /* The daily claim is decided by the `points` row in the database, not by
    localStorage — that's what stops it from being re-claimed just by
    clearing local storage or switching browsers. */
 function claimDailyBonus(){
   const s=getPointsState();
   if(s.lastClaimDate===todayKey()){toast('Already claimed today — come back tomorrow!');return}
-  if(!CSRF_TOKEN){claimDailyBonusLocal();return}
+  if(!CSRF_TOKEN){toast('Sign in to claim your daily bonus');return}
   const btn=$('#claimDailyBonusBtn');if(btn)btn.disabled=true;
   fetch(DISK_ENDPOINT+'?action=claim-daily-bonus',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:CSRF_TOKEN})})
     .then(r=>r.json())
     .then(res=>{
       if(res&&res.ok){
         const beforeRank=getRank(getPointsState().total);
+        if(res.clock)setServerClock(res.clock);
         store.set('points',{total:res.points.total,lastClaimDate:res.points.lastClaimDate,streak:res.points.streak});
         activity('Claimed daily bonus (streak '+res.points.streak+'d) ('+(res.amount>0?'+':'')+res.amount+' XP)');
         renderPoints();
@@ -911,10 +1406,12 @@ function claimDailyBonus(){
       }else{
         store.set('points',{total:res&&res.points?res.points.total:getPointsState().total,lastClaimDate:res&&res.points?res.points.lastClaimDate:getPointsState().lastClaimDate,streak:res&&res.points?res.points.streak:getPointsState().streak});
         renderPoints();
+        if(res&&res.clock)setServerClock(res.clock);
         toast((res&&res.error)||'Could not claim right now — try again.');
       }
     })
-    .catch(()=>claimDailyBonusLocal());
+    .catch(()=>{toast('Could not reach the server — the daily bonus can only be claimed online.')})
+    .then(()=>{if(btn)btn.disabled=!canClaimDailyBonus()});
 }
 function renderPoints(){
   const s=getPointsState(),rank=getRank(s.total),claimable=canClaimDailyBonus(),prog=getRankProgress(s.total);
@@ -1044,14 +1541,25 @@ function getGsProgress(){try{return JSON.parse(localStorage.getItem(userScopedKe
 function markGs(step){
   const p=getGsProgress();if(p[step])return;
   p[step]=true;localStorage.setItem(userScopedKey(GS_KEY),JSON.stringify(p));renderGettingStarted();
-  awardPoints(2,'Milestone: '+(GS_LABELS[step]||step));
+  awardOnce('milestone',step,'Milestone: '+(GS_LABELS[step]||step));
   if(Object.keys(GS_LABELS).every(k=>p[k])&&!localStorage.getItem(userScopedKey('gsAllDoneBonus'))){
     localStorage.setItem(userScopedKey('gsAllDoneBonus'),'true');
-    awardPoints(5,'Completed the beginner journey');
+    awardOnce('milestone','journey','Completed the beginner journey');
   }
 }
 function renderGettingStarted(){const wrap=$('#gsSteps');if(!wrap)return;const p=getGsProgress();let done=0;wrap.querySelectorAll('.gs-step').forEach(li=>{const key=li.dataset.gs;const isDone=!!p[key];li.classList.toggle('done',isDone);if(isDone)done++});const label=$('#gsProgressLabel');if(label)label.innerHTML='<i class="bx bx-check-circle"></i> '+done+' of 4 done'}
 ensureSampleSnippets();renderProjects();renderSnippets();renderNotes();renderActivity();updateCounts();renderGettingStarted();renderStarterRanking();renderPlaygroundLeaderboard();renderPoints();
+/* Anti-tamper upkeep for the daily reward: re-render the claim button when
+   the (server-based) date rolls over in a long-open tab, re-sync points and
+   the server clock whenever the tab regains focus and every few minutes,
+   and tell the user once if their device clock is visibly wrong. */
+let lastRenderedDay=todayKey();
+setInterval(()=>{const d=todayKey();if(d!==lastRenderedDay){lastRenderedDay=d;renderPoints()}},30000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)resyncFromServer()});
+setInterval(resyncFromServer,5*60*1000);
+if(SERVER_CLOCK&&Math.abs(Date.now()-SERVER_CLOCK.now)>10*60*1000){
+  setTimeout(()=>toast("Your device clock is off by more than 10 minutes — daily rewards follow the server's date."),1500);
+}
 const tabs=$$('.tab');
 const DEFAULT_HTML=`<!doctype html>
 <html>
@@ -1062,7 +1570,7 @@ const DEFAULT_HTML=`<!doctype html>
 <body>
   <main class="demo">
     <span class="eyebrow">DEV DESK</span>
-    <h1>Hello A-DevTools</h1>
+    <h1>Hello A-Code Playground</h1>
     <p>Edit HTML, CSS and JavaScript, then press Run.</p>
     <button id="demoButton">Test interaction</button>
   </main>
@@ -1096,7 +1604,7 @@ function ensureResponsiveDoc(htmlStr){
   return meta+baseStyle+htmlStr;
 }
 
-var cmHtml=null,cmCss=null,cmJs=null,wrapEnabled=true;
+var cmHtml=null,cmCss=null,cmJs=null,wrapEnabled=true,activeNoteCm=null,activeDropdownClose=null;
 function setEditorDirty(text){const el=$('#editorDirty');if(el)el.textContent=text}
 function activeTabName(){return document.querySelector('.tab.active')?.dataset.tab||'html'}
 function activeCm(){const t=activeTabName();return t==='css'?cmCss:t==='js'?cmJs:cmHtml}
@@ -1137,6 +1645,22 @@ function beautify(kind,code){
   }catch(e){/* fall through and show the code as-is */}
   return code;
 }
+/* Reassembles a combined HTML+CSS(+JS) string with the same beautified,
+   properly line-broken formatting the Playground and the Preview modal
+   already show — instead of whatever raw formatting (often one long
+   minified line) the snippet happens to be stored as. Used by every
+   "Copy" action so what lands on the clipboard is always readable,
+   never a one-line wall of text. PHP is left untouched since it isn't
+   HTML/CSS/JS and splitCombinedCode/beautify don't apply to it. */
+function formatCombinedCode(raw,lang){
+  if(String(lang||'').toUpperCase()==='PHP')return raw;
+  const {html,css,js}=splitCombinedCode(raw);
+  let out=(beautify('html',html)||'').trim();
+  if(css.trim())out+=(out?'\n\n':'')+'<style>\n'+beautify('css',css)+'\n</style>';
+  if(js.trim())out+=(out?'\n\n':'')+'<script>\n'+beautify('js',js)+'\n</script>';
+  return out||raw;
+}
+window.formatCombinedCode=formatCombinedCode;
 /* Unicode-safe base64 round-trip, used to hand preview code to
    mountCodeEditor() via a data attribute without fighting HTML escaping
    of quotes/angle-brackets in the source. */
@@ -1217,11 +1741,12 @@ tabs.forEach(t=>t.onclick=()=>{
 });
 
 function loadPlaygroundPayload(){
-  const raw=sessionStorage.getItem('adevtoolsPlayground');
+  if($('#pgCode'))return false; /* the combined Playground (playground.js) reads the handoff itself */
+  const raw=sessionStorage.getItem('acodeplaygroundPlayground');
   if(!raw)return false;
-  sessionStorage.removeItem('adevtoolsPlayground');
-  const title=sessionStorage.getItem('adevtoolsPlaygroundTitle')||'Snippet';
-  sessionStorage.removeItem('adevtoolsPlaygroundTitle');
+  sessionStorage.removeItem('acodeplaygroundPlayground');
+  const title=sessionStorage.getItem('acodeplaygroundPlaygroundTitle')||'Snippet';
+  sessionStorage.removeItem('acodeplaygroundPlaygroundTitle');
   let payload=null;try{payload=JSON.parse(raw)}catch(e){payload=null}
   if(!payload||typeof payload.code!=='string')return false;
   if(!cmHtml)return false;
@@ -1249,7 +1774,7 @@ loadPlaygroundPayload();
    itself was also invoked automatically once whenever the Playground page
    loaded (see the bare `runCode()` call below). Since navigating to the
    Playground from another tab/page is a full page load in this app, that
-   auto-run silently handed out 5 XP every single time — even with zero
+   auto-run silently handed out XP every single time — even with zero
    changes to the code. Fixed by: (1) the initial/automatic run and the
    Reset button's run never award XP (award=false), and (2) a manual Run
    only awards XP if the code actually differs from the last code that was
@@ -1266,7 +1791,7 @@ function runCode(award){
   if(award){
     const snapshot=h+'\u0000'+c+'\u0000'+j;
     if(snapshot!==lastAwardedPlaygroundCode){
-      awardPoints(5,'Ran code playground');markGs('ranCode');
+      awardOnce('run-code',snapshot,'Ran code playground');markGs('ranCode');
       lastAwardedPlaygroundCode=snapshot;
     }
   }
@@ -1351,14 +1876,67 @@ $('#formatCode')?.addEventListener('click',()=>{
   const out=beautify(tab,cm.getValue());
   cm.setValue(out);updateCharCount();setEditorDirty('Formatted');updateTabIndicators();toast('Code formatted');
 });
-$('#downloadCode')?.addEventListener('click',()=>{
-  const h=cmHtml?cmHtml.getValue():'',c=cmCss?cmCss.getValue():'',j=cmJs?cmJs.getValue():'';
-  const doc=`${h}\n<style>\n${c}\n</style>\n<script>\n${j}\n<\/script>`;
-  const blob=new Blob([doc],{type:'text/html'});
+/* ---------------------------------------------------------------------
+   ZIP export helpers — shared with playground.js (exposed on window as
+   ACodeZip) so every "download this project" button in the app produces
+   the same categorized structure: index.html at the root, styles under
+   assets/css/, scripts under assets/js/. Requires JSZip (loaded from
+   cdnjs alongside CodeMirror/js-beautify in index.php). */
+function triggerBlobDownload(blob,filename){
   const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='playground.html';document.body.appendChild(a);a.click();a.remove();
+  const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  toast('Downloaded playground.html');
+}
+function buildProjectZip(files){
+  const zip=new JSZip();
+  Object.keys(files).forEach(path=>{const content=files[path];if(content!=null)zip.file(path,content)});
+  return zip.generateAsync({type:'blob'});
+}
+// Inserts <link>/<script src> tags for the exported CSS/JS files into an
+// HTML document, using the existing <head>/<body> tags when present and
+// falling back gracefully when the markup is just a fragment.
+function injectAssetLinks(html,{css,js}={}){
+  let out=html||'';
+  if(css){
+    const linkTag='  <link rel="stylesheet" href="assets/css/style.css">\n';
+    if(/<\/head>/i.test(out))out=out.replace(/<\/head>/i,linkTag+'</head>');
+    else if(/<head[^>]*>/i.test(out))out=out.replace(/(<head[^>]*>)/i,`$1\n${linkTag}`);
+    else out=linkTag+out;
+  }
+  if(js){
+    const scriptTag='  <script src="assets/js/script.js"><\/script>\n';
+    if(/<\/body>/i.test(out))out=out.replace(/<\/body>/i,scriptTag+'</body>');
+    else out=out+'\n'+scriptTag;
+  }
+  return out;
+}
+// Pulls inline <style> and inline <script> (no src=) blocks out of a
+// single-file HTML document, so a one-editor "web" sample can still be
+// exported as index.html + assets/css/style.css + assets/js/script.js.
+function splitWebDoc(html){
+  let css='',js='';
+  let out=(html||'').replace(/<style[^>]*>([\s\S]*?)<\/style>/gi,(m,body)=>{css+=(css?'\n\n':'')+body.trim();return ''});
+  out=out.replace(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi,(m,body)=>{if(body.trim())js+=(js?'\n\n':'')+body.trim();return ''});
+  return {html:out,css,js};
+}
+window.ACodeZip={triggerBlobDownload,buildProjectZip,injectAssetLinks,splitWebDoc};
+
+$('#downloadCode')?.addEventListener('click',async()=>{
+  if(typeof JSZip==='undefined'){toast('Zip library failed to load — check your connection and try again');return}
+  const h=cmHtml?cmHtml.getValue():'',c=cmCss?cmCss.getValue():'',j=cmJs?cmJs.getValue():'';
+  const hasCss=!!c.trim(),hasJs=!!j.trim();
+  const base=h.trim()||'<!doctype html>\n<html>\n<head>\n  <meta charset="utf-8">\n</head>\n<body>\n</body>\n</html>';
+  const files={'index.html':injectAssetLinks(base,{css:hasCss,js:hasJs})};
+  if(hasCss)files['assets/css/style.css']=c;
+  if(hasJs)files['assets/js/script.js']=j;
+  try{
+    const blob=await buildProjectZip(files);
+    triggerBlobDownload(blob,'playground.zip');
+    toast('Downloaded playground.zip');
+  }catch(err){
+    console.error(err);
+    toast('Could not build the zip file');
+  }
 });
 $('#wrapToggle')?.addEventListener('click',e=>{
   wrapEnabled=!wrapEnabled;
@@ -1368,19 +1946,6 @@ $('#wrapToggle')?.addEventListener('click',e=>{
   [cmHtml,cmCss,cmJs].forEach(cm=>cm&&cm.setOption('lineWrapping',wrapEnabled));
   toast(wrapEnabled?'Line wrap on':'Line wrap off');
 });
-/* "Command Palette" isn't a separate popup — it's a shortcut that jumps
-   focus straight into the top search bar (search projects/snippets/notes,
-   or the saved-library search on those pages). On narrow screens the top
-   search bar is hidden in favor of the mobile search icon/panel, so jump
-   there instead when that's the case, or Ctrl+K / clicking the button
-   would silently do nothing. */
-function openCommandPalette(){
-  const desktopSearch=$('#globalSearch');
-  if(desktopSearch && desktopSearch.offsetParent!==null){desktopSearch.focus();return}
-  $('#mobileSearchToggle')?.click();
-}
-document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCommandPalette()}});
-$('#quickCommand')?.addEventListener('click',openCommandPalette);
 $('#globalSearch')?.addEventListener('input',e=>{const q=e.target.value.toLowerCase().trim();if(location.search.includes('page=saved-snippets')){const local=$('#savedSnippetsSearch');if(local){local.value=q;renderSavedSnippets();return}}if(location.search.includes('page=saved-components')){const local=$('#savedComponentsSearch');if(local){local.value=q;renderSavedComponents();return}}document.querySelectorAll('.project-card,.snippet-card,.note-card,.quick-card').forEach(x=>x.style.display=!q||x.textContent.toLowerCase().includes(q)?'':'none')});
 
 /* components.js runs in its own scope and needs these to save components
@@ -1392,8 +1957,16 @@ window.diskSaveItem=diskSaveItem;
 window.toast=toast;
 window.activity=activity;
 window.awardPoints=awardPoints;
+window.awardOnce=awardOnce;
+window.collectSnapshot=collectSnapshot;
+window.applyImportedSnapshot=applyImportedSnapshot;
+window.xpFp=xpFp;
 window.savePlaygroundPayload=savePlaygroundPayload;
 window.buildCodePreviewMarkup=buildCodePreviewMarkup;
+window.b64EncodeUnicode=b64EncodeUnicode;
+window.ensureResponsiveDoc=ensureResponsiveDoc;
+window.cmThemeName=cmThemeName;
+window.markGs=markGs;
 /* Points/rank/formatting helpers — needed by viewProfileForm() and
    friends in the later "Accessibility + beginner-friendly additions"
    IIFE, which runs in its own scope and otherwise can't see functions
@@ -1406,6 +1979,13 @@ window.rankSubBadge=rankSubBadge;
 window.escapeHtml=escapeHtml;
 window.escapeAttr=escapeAttr;
 window.userScopedKey=userScopedKey;
+/* snippetSource()/snippetCategory() split the single `snippets` store into
+   plain snippets vs saved components. viewProfileForm() counts both, and it
+   lives in a different IIFE — without these exports it threw
+   "ReferenceError: snippetSource is not defined" and the View Profile
+   modal never opened. */
+window.snippetSource=snippetSource;
+window.snippetCategory=snippetCategory;
 })();
 
 /* Beginner guide interactions */
@@ -1454,7 +2034,7 @@ window.userScopedKey=userScopedKey;
 
   /* --- First-run guided tour + Help --- */
   function tourHtml(){
-    return `<h2 id="modalTitle">Welcome to A-DevTools</h2><p class="modal-subtitle">A quick 4-step path if this is your first time here. You can replay this anytime from Settings.</p>
+    return `<h2 id="modalTitle">Welcome to A-Code Playground</h2><p class="modal-subtitle">A quick 4-step path if this is your first time here. You can replay this anytime from Settings.</p>
     <ol class="tour-steps">
       <li><i class="bx bx-code-block"></i><div><b>1. Open Snippets</b><small>Browse ready-made starters and preview what they do before touching any code.</small></div></li>
       <li><i class="bx bx-code-alt"></i><div><b>2. Run code in the Playground</b><small>Send a starter to the Playground, change one small thing, and press "Run my code".</small></div></li>
@@ -1484,7 +2064,7 @@ window.userScopedKey=userScopedKey;
   function levelNeedsExam(level){return level==='intermediate'||level==='professional'}
   function examAlreadyPassed(level){return localStorage.getItem(userScopedKey('examPassed_'+level))==='true'}
   function experienceHtml(selected){
-    return `<h2 id="modalTitle">How experienced are you?</h2><p class="modal-subtitle">Pick the option that fits best. This decides how much guidance A-DevTools shows you — you can change it anytime in Settings. Use the arrow keys to browse, Enter to pick.</p>
+    return `<h2 id="modalTitle">How experienced are you?</h2><p class="modal-subtitle">Pick the option that fits best. This decides how much guidance A-Code Playground shows you — you can change it anytime in Settings. Use the arrow keys to browse, Enter to pick.</p>
     <div class="experience-choices" role="radiogroup" aria-label="Experience level">${EXPERIENCE_LEVELS.map(l=>{
       const isCurrent=selected===l.key;
       const earned=levelNeedsExam(l.key)&&examAlreadyPassed(l.key);
@@ -1813,7 +2393,7 @@ window.userScopedKey=userScopedKey;
       </div>
       <p class="muted profile-view-joined"><i class="bx bx-calendar"></i> Member since ${escapeHtml(joinedLabel)}</p>
       <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Close</button><button class="primary-btn" id="goEditProfileBtn"><i class="bx bx-pencil"></i> Edit Profile</button></div>
-    </div>`,'modal-compact');
+    </div>`,'modal-profile');
     const goEditBtn=$('#goEditProfileBtn');
     if(goEditBtn)goEditBtn.onclick=()=>editProfileForm();
   }
@@ -1828,7 +2408,7 @@ window.userScopedKey=userScopedKey;
       <p class="muted" style="margin:0 0 8px">Leave the password fields blank to keep your current password.</p>
       <label>Current password<input id="epCurPass" class="input" type="password" placeholder="Only needed to change your password" autocomplete="current-password"></label>
       <label>New password<input id="epNewPass" class="input" type="password" placeholder="At least 6 characters" autocomplete="new-password"></label>
-      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`);
+      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`,'modal-profile');
     const saveBtn=$('#saveProfileBtn');
     saveBtn.onclick=()=>{
       const name=$('#epName').value.trim(),email=$('#epEmail').value.trim();

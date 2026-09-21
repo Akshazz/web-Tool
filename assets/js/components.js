@@ -1,5 +1,5 @@
 /* =========================================================================
-   A-DevTools — UI component library
+   A-Code Playground — UI component library
    -------------------------------------------------------------------------
    Every entry below is a self-contained HTML + CSS (+ JS) fragment written
    against the shared design tokens injected by TOKENS. The page renders each
@@ -7,7 +7,7 @@
    running, not a picture of it. Copy / Run / Save prepend TOKENS so the
    fragment keeps working outside this page.
 
-   Loaded only on ?page=components. Depends on app.js for store, toast,
+   Loaded only on ?page=components and ?page=php-sample. Depends on app.js for store, toast,
    activity, savePlaygroundPayload, buildCodePreviewMarkup, openModal.
    ========================================================================= */
 (function () {
@@ -94,7 +94,7 @@
       id: 'copy-button', name: 'Copy to clipboard', cat: 'Actions', h: 130,
       desc: 'A copy button that confirms in place instead of firing a toast.',
       code:
-'<button class="copy" data-value="npm install a-devtools">\n' +
+'<button class="copy" data-value="npm install a-codeplayground">\n' +
 '  <span class="label">Copy install command</span>\n' +
 '</button>\n' +
 '<style>\n' +
@@ -508,9 +508,9 @@
       desc: 'Four severities. Each says what happened and what to do next.',
       code:
 '<div class="alert info"><b>Backup location changed</b><p>New files go to your Desktop folder. Old files stay where they are.</p></div>\n' +
-'<div class="alert ok"><b>Snippet saved</b><p>Find it under Snippets, or press Ctrl K to jump there.</p></div>\n' +
+'<div class="alert ok"><b>Snippet saved</b><p>Find it under Snippets.</p></div>\n' +
 '<div class="alert warn"><b>Storage almost full</b><p>Delete unused projects to keep auto-save working.</p></div>\n' +
-'<div class="alert bad"><b>Import failed</b><p>That file is not a A-DevTools backup. Pick a .json export.</p></div>\n' +
+'<div class="alert bad"><b>Import failed</b><p>That file is not a A-Code Playground backup. Pick a .json export.</p></div>\n' +
 '<style>\n' +
 '.alert{max-width:480px;padding:13px 15px;border-radius:11px;margin-bottom:10px;\n' +
 '  background:var(--surface);border:1px solid var(--border);border-left-width:3px}\n' +
@@ -1166,6 +1166,12 @@
     }
   ];
 
+  /* The PHP Sample page (?page=php-sample) reuses this renderer with its own
+     catalog (php-basics.js + components-php.js), so those samples never
+     appear on the UI Components page. */
+  var isPhpPage = root.dataset.catalog === 'php-sample';
+  if (isPhpPage) COMPONENTS = (window.PHP_BASIC_SAMPLES || []).concat(window.PHP_CRUD_COMPONENTS || []);
+
   /* ---- Rendering ------------------------------------------------------ */
   var esc = window.escapeHtml || function (s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (m) {
@@ -1200,7 +1206,8 @@
   }
 
   /* Portable version: tokens travel with the fragment. */
-  function portable(c) { return TOKENS + c.code; }
+  /* PHP samples are plain source, so they never get the CSS tokens prepended. */
+  function portable(c) { return c.lang === 'PHP' ? c.code : TOKENS + c.code; }
 
   function visible() {
     var q = state.q.toLowerCase();
@@ -1240,7 +1247,7 @@
       f.setAttribute('title', c.name + ' demo');
       f.setAttribute('loading', 'lazy');
       f.addEventListener('load', function () { stage.classList.add('ready'); });
-      f.srcdoc = demoDoc(c.code);
+      f.srcdoc = demoDoc(c.preview || c.code);
       stage.appendChild(f);
     });
   }
@@ -1252,7 +1259,7 @@
 
   function render() {
     var list = visible();
-    if (countEl) countEl.textContent = list.length + (list.length === 1 ? ' component' : ' components');
+    if (countEl) countEl.textContent = list.length + (isPhpPage ? (list.length === 1 ? ' sample' : ' samples') : (list.length === 1 ? ' component' : ' components'));
     grid.innerHTML = list.length
       ? list.map(cardMarkup).join('')
       : '<div class="empty">Nothing matches that search. Try a shorter word, or pick All.</div>';
@@ -1263,7 +1270,7 @@
   var themeWatch = new MutationObserver(function () {
     root.querySelectorAll('.cmp-card').forEach(function (card) {
       var c = byId(card.dataset.id), f = card.querySelector('iframe');
-      if (c && f) f.srcdoc = demoDoc(c.code);
+      if (c && f) f.srcdoc = demoDoc(c.preview || c.code);
     });
   });
   themeWatch.observe(document.body, { attributes: true, attributeFilter: ['class'] });
@@ -1289,32 +1296,43 @@
     if (!c) return;
 
     if (btn.dataset.act === 'copy') {
-      copyText(portable(c), function () {
+      copyText(formatCombinedCode(portable(c), c.lang), function () {
         if (window.toast) toast(c.name + ' copied with its styles');
       });
     } else if (btn.dataset.act === 'run') {
       if (window.savePlaygroundPayload) {
-        savePlaygroundPayload({ code: portable(c), lang: 'HTML + CSS' }, c.name);
+        savePlaygroundPayload({ code: portable(c), lang: c.lang || 'HTML + CSS' }, c.name);
       }
     } else if (btn.dataset.act === 'save') {
       var list = store.get('snippets');
-      var id = 'component-' + c.id;
+      /* PHP CRUD samples are code snippets, so they go to Saved Snippets. */
+      var isPhp = c.lang === 'PHP';
+      var id = (isPhp ? '' : 'component-') + c.id;
+      var where = isPhp ? 'Saved Snippets' : 'Saved Components';
       if (list.some(function (x) { return String(x.id) === id; })) {
-        if (window.toast) toast(c.name + ' is already in your Saved Components');
+        if (window.toast) toast(c.name + ' is already in your ' + where);
         return;
       }
-      var item = { id: id, title: c.name, lang: 'HTML + CSS', code: portable(c), source: 'component', category: c.cat, createdAt: Date.now() };
+      var item = { id: id, title: c.name, lang: c.lang || 'HTML + CSS', code: portable(c), source: isPhp ? 'snippet' : 'component', category: isPhp ? 'PHP' : c.cat, createdAt: Date.now() };
       list.unshift(item);
       store.set('snippets', list);
       if (window.diskSaveItem) diskSaveItem('snippets', item);
-      if (window.awardPoints) awardPoints(5, 'Saved component: ' + c.name);
-      else if (window.activity) activity('Saved component: ' + c.name);
+      if (window.awardOnce) awardOnce('snippet', xpFp('snippet', item.title, item.lang, item.code), 'Saved ' + (isPhp ? 'snippet' : 'component') + ': ' + c.name);
+      else if (window.activity) activity('Saved ' + (isPhp ? 'snippet' : 'component') + ': ' + c.name);
       if (window.updateCounts) updateCounts();
-      if (window.toast) toast(c.name + ' saved to Saved Components');
+      if (window.toast) toast(c.name + ' saved to ' + where);
     } else if (btn.dataset.act === 'code') {
-      var body = window.buildCodePreviewMarkup
-        ? buildCodePreviewMarkup(portable(c), 'preview-code-xl')
-        : '<pre class="modal-code">' + esc(portable(c)) + '</pre>';
+      var body;
+      if (c.lang === 'PHP' && window.b64EncodeUnicode) {
+        /* buildCodePreviewMarkup() splits HTML/CSS/JS, so PHP gets its own single panel. */
+        body = '<div class="preview-code-frame"><div class="code-mini-editor preview-code-xl preview-code-panel active" ' +
+          'data-preview-panel="php" data-cm-mode="application/x-httpd-php" data-code-b64="' +
+          b64EncodeUnicode(c.code) + '"></div></div>';
+      } else if (window.buildCodePreviewMarkup) {
+        body = buildCodePreviewMarkup(portable(c), 'preview-code-xl');
+      } else {
+        body = '<pre class="modal-code">' + esc(portable(c)) + '</pre>';
+      }
       openModal(
         '<div class="modal-preview-head"><div><span class="section-kicker">' + esc(c.cat) +
         '</span><h2>' + esc(c.name) + '</h2></div></div>' + body +
@@ -1330,7 +1348,7 @@
     var b = e.target.closest('[data-cmp-copy]');
     if (!b) return;
     var c = byId(b.getAttribute('data-cmp-copy'));
-    if (c) copyText(portable(c), function () { if (window.toast) toast('Code copied'); });
+    if (c) copyText(formatCombinedCode(portable(c), c.lang), function () { if (window.toast) toast('Code copied'); });
   });
 
   chipBar.addEventListener('click', function (e) {

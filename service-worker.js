@@ -1,5 +1,5 @@
 /**
- * A-DevTools service worker — intentionally minimal.
+ * A-Code Playground service worker — intentionally minimal.
  *
  * A service worker with a fetch handler is required for Chrome/Edge/Android
  * to consider the site installable (the `beforeinstallprompt` event never

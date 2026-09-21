@@ -11,7 +11,7 @@ button will start downloading it immediately — no code changes needed.
 
 ### Don't have an APK yet?
 
-A-DevTools is now a valid installable PWA (see `manifest.webmanifest` and
+A-Code Playground is now a valid installable PWA (see `manifest.webmanifest` and
 `service-worker.js` in the project root), so you can generate a real, signed
 Android APK or AAB for free, with no Android Studio or coding required:
 

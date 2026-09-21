@@ -9,8 +9,8 @@
  * $pwaVersion to already
  * be set by index.php.
  */
-if (!defined('ADEVTOOLS_SECURITY_LOADED')) { require_once __DIR__ . '/core/security.php'; }
-if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpers.php'; }
+if (!defined('ACODEPLAYGROUND_SECURITY_LOADED')) { require_once __DIR__ . '/core/security.php'; }
+if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpers.php'; }
 ?>
 <!doctype html>
 <html lang="en">
@@ -18,13 +18,13 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#111214">
-<title><?php echo $page === 'login' ? 'Log in' : ($page === 'signup' ? 'Join the Community' : ($page === 'terms' ? 'Terms of Service' : ($page === 'privacy' ? 'Privacy Policy' : 'A-DevTools — Build. Test. Learn. Ship.'))); ?></title>
+<title><?php echo $page === 'login' ? 'Log in' : ($page === 'signup' ? 'Join the Community' : ($page === 'terms' ? 'Terms of Service' : ($page === 'privacy' ? 'Privacy Policy' : 'A-Code Playground — Build. Test. Learn. Ship.'))); ?></title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="assets/icons/favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="A-DevTools">
+<meta name="apple-mobile-web-app-title" content="A-Code Playground">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/boxicons/2.1.4/css/boxicons.min.css">
 <link rel="stylesheet" href="assets/css/app.css?v=<?php echo (int)$cssVersion; ?>">
@@ -34,7 +34,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
 
 <header class="guest-topbar" id="guestTopbar">
     <div class="guest-topbar-inner">
-    <a class="brand" href="?page=landing" aria-label="A-DevTools home"><span class="brand-mark"><i class="bx bx-code-alt"></i></span><span>A-DevTools</span></a>
+    <a class="brand" href="?page=landing" aria-label="A-Code Playground home"><span class="brand-mark"><i class="bx bx-code-alt"></i></span><span>A-Code Playground</span></a>
 
     <?php if ($page === 'landing'): ?>
     <nav class="guest-nav-links" id="guestNavLinks" aria-label="Section navigation">
@@ -65,7 +65,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
             </div>
             <div class="lang-backdrop" id="langBackdrop" hidden></div>
         </div>
-        <button type="button" class="pill-btn install-btn" id="pwaInstallBtn" title="Install A-DevTools as an app" aria-label="Install A-DevTools as an app" data-i18n-title="pwa.installTitle">
+        <button type="button" class="pill-btn install-btn" id="pwaInstallBtn" title="Install A-Code Playground as an app" aria-label="Install A-Code Playground as an app" data-i18n-title="pwa.installTitle">
             <i class="bx bx-download"></i><span class="pwa-install-label" data-i18n="pwa.install">Install App</span>
         </button>
         <button type="button" class="icon-btn apk-btn" id="apkDownloadBtn" title="Download Android APK" aria-label="Download Android APK" data-i18n-title="pwa.apkTitle"><i class="bx bx-cloud-download"></i></button>
@@ -102,7 +102,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
             </div>
 
             <?php if ($page === 'signup'): ?>
-                <h1 data-i18n="auth.joinTitle">Join the A-DevTools Community</h1>
+                <h1 data-i18n="auth.joinTitle">Join the A-Code Playground Community</h1>
                 <p class="muted" data-i18n="auth.joinSubtitle">Create a free account to sync your workspace to this computer and pick up where you left off.</p>
                 <form id="signupForm" class="auth-form" novalidate>
                     <label for="suName" data-i18n="auth.name">Name</label>
@@ -185,12 +185,12 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
         <div class="auth-card panel legal-page">
             <?php if ($page === 'terms'): ?>
                 <h1>Terms of Service</h1>
-                <p class="muted">Placeholder terms — replace this page with your own before going live. By creating an account you agree to use A-DevTools responsibly, keep your login credentials secure, and accept that this is a self-hosted, free, no-warranty tool.</p>
+                <p class="muted">Placeholder terms — replace this page with your own before going live. By creating an account you agree to use A-Code Playground responsibly, keep your login credentials secure, and accept that this is a self-hosted, free, no-warranty tool.</p>
             <?php else: ?>
                 <h1>Privacy Policy</h1>
-                <p class="muted">Placeholder privacy policy — replace this page with your own before going live. A-DevTools stores the account info you provide (name, email, and — for password accounts — a hashed password) and, if you sign in with Google, GitHub or Facebook, the name/email/ID that provider shares with us. This data is used only to run your account and is not sold or shared with third parties.</p>
+                <p class="muted">Placeholder privacy policy — replace this page with your own before going live. A-Code Playground stores the account info you provide (name, email, and — for password accounts — a hashed password) and, if you sign in with Google, GitHub or Facebook, the name/email/ID that provider shares with us. This data is used only to run your account and is not sold or shared with third parties.</p>
             <?php endif; ?>
-            <p class="muted auth-switch"><a class="text-link" href="?page=landing">&larr; Back to A-DevTools</a></p>
+            <p class="muted auth-switch"><a class="text-link" href="?page=landing">&larr; Back to A-Code Playground</a></p>
         </div>
     </section>
 
@@ -280,7 +280,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
                 <button type="button" class="auth-card-close" data-close-auth aria-label="Close"><i class="bx bx-x"></i></button>
                 <span class="pill-tag"><i class="bx bx-log-in"></i> <span data-i18n="landing.welcomeBackTag">WELCOME BACK</span></span>
                 <h2 data-i18n="landing.signInTitle">Sign In</h2>
-                <p class="muted" data-i18n="landing.signInSubtitle">Log in to A-DevTools to keep working on your projects.</p>
+                <p class="muted" data-i18n="landing.signInSubtitle">Log in to A-Code Playground to keep working on your projects.</p>
                 <form id="loginForm" class="auth-form" novalidate>
                     <label for="liEmail" data-i18n="auth.email">Email</label>
                     <div class="field-group">
@@ -326,7 +326,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
 <footer class="guest-footer">
     <div class="guest-footer-inner">
         <div class="guest-footer-brand reveal">
-            <a class="brand" href="?page=landing" aria-label="A-DevTools home"><span class="brand-mark"><i class="bx bx-code-alt"></i></span><span>A-DevTools</span></a>
+            <a class="brand" href="?page=landing" aria-label="A-Code Playground home"><span class="brand-mark"><i class="bx bx-code-alt"></i></span><span>A-Code Playground</span></a>
             <p class="muted" data-i18n="landing.footerTag">A self-hosted workspace for organizing code, UI experiments, snippets, projects and development notes.</p>
         </div>
         <div class="guest-footer-col reveal">
@@ -343,9 +343,9 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
         </div>
     </div>
     <div class="guest-footer-bottom">
-        <span><i class="bx bx-copyright"></i> <?php echo date('Y'); ?> A-DevTools. <span data-i18n="landing.allRightsReserved">All rights reserved.</span></span>
+        <span><i class="bx bx-copyright"></i> <?php echo date('Y'); ?> A-Code Playground. <span data-i18n="landing.allRightsReserved">All rights reserved.</span></span>
         <span class="guest-footer-tag" data-i18n="dash.hero.title">Build. Test. Learn. Ship.</span>
-        <button type="button" class="icon-btn guest-footer-admin-btn" id="adminControlBtn" title="Admin Control" aria-label="Open Admin Control" aria-haspopup="dialog"><i class="bx bxs-shield-alt-2"></i></button>
+        <a class="icon-btn guest-footer-admin-btn" id="adminControlBtn" href="admin-dashboard.php" title="Admin dashboard" aria-label="Open admin dashboard"><i class="bx bxs-shield-alt-2"></i></a>
     </div>
 </footer>
 
@@ -434,7 +434,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
   /* Short alias for the shared i18n lookup — falls back to the given
      English string if i18n.js hasn't loaded yet for some reason. */
   function t(key, fallback) {
-    return window.ADevToolsI18n ? window.ADevToolsI18n.t(key) : fallback;
+    return window.ACodePlaygroundI18n ? window.ACodePlaygroundI18n.t(key) : fallback;
   }
 
   function showAuthError(form, errorBox, message) {
@@ -522,7 +522,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
 <script>
 (function(){
   function t(key, fallback) {
-    return window.ADevToolsI18n ? window.ADevToolsI18n.t(key) : fallback;
+    return window.ACodePlaygroundI18n ? window.ACodePlaygroundI18n.t(key) : fallback;
   }
 
   /* ---------- Password show/hide toggles (any field with a data-toggle-password button) ---------- */
@@ -817,7 +817,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
 <script>
 (function(){
   function t(key, fallback) {
-    return window.ADevToolsI18n ? window.ADevToolsI18n.t(key) : fallback;
+    return window.ACodePlaygroundI18n ? window.ACodePlaygroundI18n.t(key) : fallback;
   }
 
   /* ---------- Generic modal open/close (the #modal markup is shared with
@@ -859,7 +859,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
       html:
         '<p class="muted">Placeholder terms — replace this page with your own before going live.</p>' +
         '<ol style="margin:0;padding-left:20px;line-height:1.7;color:var(--text)">' +
-        '<li>By creating an account you agree to use A-DevTools responsibly and not to abuse, disrupt or attempt unauthorized access to the service.</li>' +
+        '<li>By creating an account you agree to use A-Code Playground responsibly and not to abuse, disrupt or attempt unauthorized access to the service.</li>' +
         '<li>You are responsible for keeping your login credentials — password or connected OAuth account — secure.</li>' +
         '<li>Projects, snippets and notes you create remain yours; you are responsible for the content you store here.</li>' +
         '<li>This is a self-hosted, free, no-warranty tool provided "as is", without guarantees of uptime, backups or fitness for a particular purpose.</li>' +
@@ -874,7 +874,7 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
       html:
         '<p class="muted">Placeholder privacy policy — replace this page with your own before going live.</p>' +
         '<ol style="margin:0;padding-left:20px;line-height:1.7;color:var(--text)">' +
-        '<li>A-DevTools stores the account info you provide: name, email, and — for password accounts — a hashed password (never the plain password).</li>' +
+        '<li>A-Code Playground stores the account info you provide: name, email, and — for password accounts — a hashed password (never the plain password).</li>' +
         '<li>If you sign in with Google, GitHub or Facebook, we store the name, email and account ID that provider shares with us.</li>' +
         '<li>Projects, snippets and notes are stored to run your workspace and are not scanned for advertising purposes.</li>' +
         '<li>This data is used only to operate your account and is not sold or shared with third parties.</li>' +
@@ -939,479 +939,8 @@ if (!defined('ADEVTOOLS_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpe
 
   updateConsentAvailability();
 
-  /* ---------- Admin Control (shield icon in the footer) ----------
-     Independent of the regular Community login: this asks for an
-     admin-role account's own email + password directly (throttled the
-     same way the login form is), then unlocks a full dashboard for
-     managing every account AND every piece of content (projects,
-     notes, snippets) stored in this install. Only reachable from
-     here, while logged out — a logged-in visitor is redirected away
-     from this landing page.
-
-     The whole dashboard is fetched once per open (action=stats) and
-     then browsed/searched/edited entirely client-side; every mutating
-     click (role change, edit, delete, points adjustment) re-fetches
-     stats afterwards so the tables never go stale. ---------- */
-  var adminBtn = document.getElementById('adminControlBtn');
-  if (adminBtn) {
-    function escapeHtml(s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, function(m){
-        return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m];
-      });
-    }
-    var escapeAttr = escapeHtml;
-    function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-
-    function adminPost(action, extra) {
-      return fetch('admin.php', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(Object.assign({action: action, csrf: window.CSRF_TOKEN}, extra || {}))
-      }).then(function(r){ return r.json(); });
-    }
-
-    function fmtDate(s) {
-      if (!s) return '—';
-      var d = new Date(String(s).replace(' ', 'T'));
-      return isNaN(d) ? s : d.toLocaleDateString();
-    }
-    function fmtSeconds(s) {
-      return s < 60 ? (s + 's') : (Math.ceil(s / 60) + 'm');
-    }
-    function setModalWide(on) {
-      if (modalBox) modalBox.classList.toggle('modal-admin', on);
-    }
-    function filterRows(list, query, fields) {
-      if (!query) return list;
-      var q = query.toLowerCase();
-      return list.filter(function(item){
-        return fields.some(function(f){
-          var v = item[f];
-          return v != null && String(v).toLowerCase().indexOf(q) !== -1;
-        });
-      });
-    }
-    function findUser(id) {
-      return (adminState.data.users || []).filter(function(u){ return String(u.id) === String(id); })[0];
-    }
-    function findContentItem(listKey, id, userId) {
-      var list = (adminState.data.content && adminState.data.content[listKey]) || [];
-      return list.filter(function(it){ return String(it.id) === String(id) && String(it.user_id) === String(userId); })[0];
-    }
-
-    var adminState = {
-      data: null,
-      tab: 'overview',
-      queries: { users: '', projects: '', notes: '', snippets: '' }
-    };
-
-    var contentMeta = {
-      projects: { label: 'Projects', singular: 'project', fields: ['name', 'owner_name', 'owner_email', 'tech'], cols: ['Name', 'Owner', 'Tech', 'Updated', 'Actions'] },
-      notes: { label: 'Notes', singular: 'note', fields: ['title', 'owner_name', 'owner_email'], cols: ['Title', 'Owner', 'Updated', 'Actions'] },
-      snippets: { label: 'Snippets', singular: 'snippet', fields: ['title', 'owner_name', 'owner_email', 'lang'], cols: ['Title', 'Owner', 'Language', 'Updated', 'Actions'] }
-    };
-
-    /* ---------- Tab renderers ---------- */
-
-    function renderOverviewTab(data) {
-      var c = data.counts || {};
-      var recentRows = (data.users || []).slice(0, 5).map(function(u){
-        return '<div class="admin-recent-row">' +
-          '<div><strong>' + escapeHtml(u.name) + '</strong> <span class="muted">' + escapeHtml(u.email) + '</span></div>' +
-          '<span class="role-badge role-' + escapeAttr(u.role) + '">' + escapeHtml(u.role) + '</span>' +
-          '<span class="muted">' + escapeHtml(fmtDate(u.joined_at)) + '</span>' +
-        '</div>';
-      }).join('');
-
-      return (
-        '<div class="admin-stats-grid">' +
-          '<div class="stat-card"><span>Users</span><strong>' + (c.users || 0) + '</strong></div>' +
-          '<div class="stat-card"><span>Projects</span><strong>' + (c.projects || 0) + '</strong></div>' +
-          '<div class="stat-card"><span>Snippets</span><strong>' + (c.snippets || 0) + '</strong></div>' +
-          '<div class="stat-card"><span>Notes</span><strong>' + (c.notes || 0) + '</strong></div>' +
-        '</div>' +
-        '<div class="admin-section"><h3>Newest accounts</h3><div class="admin-recent-list">' +
-        (recentRows || '<div class="admin-empty">No accounts yet.</div>') + '</div></div>'
-      );
-    }
-
-    function renderUsersTable(users, query) {
-      var filtered = filterRows(users, query, ['name', 'email']);
-      var rows = filtered.map(function(u){
-        var isAdminRole = u.role === 'admin';
-        var points = u.points_total != null ? u.points_total : 0;
-        var streak = u.points_streak != null ? u.points_streak : 0;
-        return '<tr>' +
-          '<td>' + escapeHtml(u.name) + '</td>' +
-          '<td>' + escapeHtml(u.email) + '</td>' +
-          '<td><span class="role-badge role-' + escapeAttr(u.role) + '">' + escapeHtml(u.role) + '</span></td>' +
-          '<td>' + escapeHtml(u.expertise_level || '—') + '</td>' +
-          '<td>' + points + ' XP · ' + streak + ' streak</td>' +
-          '<td>' + escapeHtml(fmtDate(u.joined_at)) + '</td>' +
-          '<td><div class="admin-row-actions">' +
-            '<button type="button" class="small-btn" data-admin-action="edit-user" data-user-id="' + escapeAttr(u.id) + '">Edit</button>' +
-            '<button type="button" class="small-btn" data-admin-action="edit-points" data-user-id="' + escapeAttr(u.id) + '">Points</button>' +
-            '<button type="button" class="small-btn" data-admin-action="set-role" data-user-id="' + escapeAttr(u.id) + '" data-role="' + (isAdminRole ? 'user' : 'admin') + '">' + (isAdminRole ? 'Remove admin' : 'Make admin') + '</button>' +
-            '<button type="button" class="small-btn danger-btn" data-admin-action="delete-user" data-user-id="' + escapeAttr(u.id) + '" data-user-name="' + escapeAttr(u.name) + '">Delete</button>' +
-          '</div></td>' +
-        '</tr>';
-      }).join('');
-      return '<table class="admin-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Level</th><th>Points</th><th>Joined</th><th>Actions</th></tr></thead>' +
-        '<tbody>' + (rows || '<tr><td colspan="7" class="admin-empty">No matching accounts.</td></tr>') + '</tbody></table>';
-    }
-
-    function renderUsersTab(data) {
-      return (
-        '<div class="admin-toolbar"><input type="search" class="input admin-search" placeholder="Search name or email…" data-admin-search="users" value="' + escapeAttr(adminState.queries.users) + '"></div>' +
-        '<div class="admin-table-wrap" id="adminUsersWrap">' + renderUsersTable(data.users || [], adminState.queries.users) + '</div>'
-      );
-    }
-
-    function renderContentTable(list, query, type) {
-      var meta = contentMeta[type];
-      var filtered = filterRows(list, query, meta.fields);
-      var rows = filtered.map(function(item){
-        var titleField = type === 'projects' ? item.name : item.title;
-        var extraCol = '';
-        if (type === 'projects') { extraCol = '<td>' + escapeHtml(item.tech || '—') + '</td>'; }
-        else if (type === 'snippets') { extraCol = '<td>' + escapeHtml(item.lang || '—') + '</td>'; }
-        return '<tr>' +
-          '<td>' + escapeHtml(titleField) + '</td>' +
-          '<td>' + escapeHtml(item.owner_name) + '<br><span class="muted">' + escapeHtml(item.owner_email) + '</span></td>' +
-          extraCol +
-          '<td>' + escapeHtml(fmtDate(item.updated_at)) + '</td>' +
-          '<td><div class="admin-row-actions">' +
-            '<button type="button" class="small-btn" data-admin-action="edit-content" data-content-type="' + meta.singular + '" data-content-id="' + escapeAttr(item.id) + '" data-user-id="' + escapeAttr(item.user_id) + '">Edit</button>' +
-            '<button type="button" class="small-btn danger-btn" data-admin-action="delete-content" data-content-type="' + meta.singular + '" data-content-id="' + escapeAttr(item.id) + '" data-user-id="' + escapeAttr(item.user_id) + '" data-content-title="' + escapeAttr(titleField) + '">Delete</button>' +
-          '</div></td>' +
-        '</tr>';
-      }).join('');
-      var headCols = meta.cols.map(function(c){ return '<th>' + c + '</th>'; }).join('');
-      return '<table class="admin-table"><thead><tr>' + headCols + '</tr></thead>' +
-        '<tbody>' + (rows || '<tr><td colspan="' + meta.cols.length + '" class="admin-empty">No matching ' + meta.label.toLowerCase() + '.</td></tr>') + '</tbody></table>';
-    }
-
-    function renderContentTab(data, type) {
-      var meta = contentMeta[type];
-      var list = (data.content && data.content[type]) || [];
-      return (
-        '<div class="admin-toolbar"><input type="search" class="input admin-search" placeholder="Search ' + meta.label.toLowerCase() + ' or owner…" data-admin-search="' + type + '" value="' + escapeAttr(adminState.queries[type]) + '"></div>' +
-        '<div class="admin-table-wrap" id="admin' + capitalize(type) + 'Wrap">' + renderContentTable(list, adminState.queries[type], type) + '</div>'
-      );
-    }
-
-    function renderSecurityTab(data) {
-      var lockoutRows = (data.lockouts || []).map(function(l){
-        return '<tr>' +
-          '<td>' + escapeHtml(l.key) + '</td>' +
-          '<td>' + (l.count == null ? '—' : escapeHtml(String(l.count))) + '</td>' +
-          '<td>' + escapeHtml(fmtSeconds(l.secondsLeft)) + '</td>' +
-          '<td><button type="button" class="small-btn" data-admin-action="clear-lockout" data-key="' + escapeAttr(l.key) + '">Clear</button></td>' +
-        '</tr>';
-      }).join('');
-      return '<div class="admin-section"><h3>Locked-out logins</h3><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Account</th><th>Failed attempts</th><th>Unlocks in</th><th></th></tr></thead>' +
-        '<tbody>' + (lockoutRows || '<tr><td colspan="4" class="admin-empty">No active lockouts.</td></tr>') + '</tbody></table></div></div>';
-    }
-
-    /* ---------- Edit forms (replace the modal body; "Cancel"/"Back"
-       returns to the dashboard without re-fetching) ---------- */
-
-    function renderUserEditForm(user) {
-      setModalWide(false);
-      openModal(
-        '<h2>Edit account</h2><p class="modal-subtitle">' + escapeHtml(user.email) + '</p>' +
-        '<form id="adminUserEditForm" class="admin-edit-form">' +
-          '<label class="full">Name<input type="text" class="input" id="aueName" value="' + escapeAttr(user.name) + '" required></label>' +
-          '<label class="full">Email<input type="email" class="input" id="aueEmail" value="' + escapeAttr(user.email) + '" required></label>' +
-          '<label class="full">Expertise level<select class="input" id="aueLevel">' +
-            ['beginner', 'intermediate', 'professional'].map(function(lv){
-              return '<option value="' + lv + '"' + (user.expertise_level === lv ? ' selected' : '') + '>' + capitalize(lv) + '</option>';
-            }).join('') +
-          '</select></label>' +
-          '<div class="modal-footer"><button type="button" class="ghost-btn" data-admin-action="back-to-users">Cancel</button><button type="submit" class="primary-btn" id="aueSubmit">Save changes</button></div>' +
-        '</form>'
-      );
-      document.getElementById('adminUserEditForm').addEventListener('submit', function(e){
-        e.preventDefault();
-        var btn = document.getElementById('aueSubmit');
-        btn.disabled = true;
-        adminPost('update-user', {
-          userId: user.id,
-          name: document.getElementById('aueName').value,
-          email: document.getElementById('aueEmail').value,
-          expertiseLevel: document.getElementById('aueLevel').value
-        }).then(function(res){
-          if (!res.ok) { btn.disabled = false; alert(res.error || 'Could not save changes.'); return; }
-          adminState.tab = 'users';
-          refreshAdminData();
-        });
-      });
-    }
-
-    function renderPointsEditForm(user) {
-      setModalWide(false);
-      openModal(
-        '<h2>Adjust points</h2><p class="modal-subtitle">' + escapeHtml(user.name) + ' — ' + escapeHtml(user.email) + '</p>' +
-        '<form id="adminPointsForm" class="admin-edit-form">' +
-          '<label class="full">Total XP<input type="number" min="0" class="input" id="apTotal" value="' + (user.points_total || 0) + '"></label>' +
-          '<label class="full">Streak (days)<input type="number" min="0" class="input" id="apStreak" value="' + (user.points_streak || 0) + '"></label>' +
-          '<p class="admin-unlock-hint">This directly overrides the account\'s XP and streak — it doesn\'t count as today\'s daily claim.</p>' +
-          '<div class="modal-footer"><button type="button" class="ghost-btn" data-admin-action="back-to-users">Cancel</button><button type="submit" class="primary-btn" id="apSubmit">Save</button></div>' +
-        '</form>'
-      );
-      document.getElementById('adminPointsForm').addEventListener('submit', function(e){
-        e.preventDefault();
-        var btn = document.getElementById('apSubmit');
-        btn.disabled = true;
-        adminPost('set-points', {
-          userId: user.id,
-          total: parseInt(document.getElementById('apTotal').value, 10) || 0,
-          streak: parseInt(document.getElementById('apStreak').value, 10) || 0
-        }).then(function(res){
-          if (!res.ok) { btn.disabled = false; alert(res.error || 'Could not save points.'); return; }
-          adminState.tab = 'users';
-          refreshAdminData();
-        });
-      });
-    }
-
-    function renderContentEditForm(item, type) {
-      setModalWide(false);
-      var fieldsHtml;
-      if (type === 'project') {
-        fieldsHtml =
-          '<label class="full">Name<input type="text" class="input" id="aceName" value="' + escapeAttr(item.name) + '" required></label>' +
-          '<label class="full">Tech<input type="text" class="input" id="aceTech" value="' + escapeAttr(item.tech || '') + '"></label>' +
-          '<label class="full">Description<textarea class="input" id="aceBody">' + escapeHtml(item.description || '') + '</textarea></label>';
-      } else if (type === 'note') {
-        fieldsHtml =
-          '<label class="full">Title<input type="text" class="input" id="aceName" value="' + escapeAttr(item.title) + '" required></label>' +
-          '<label class="full">Body<textarea class="input" id="aceBody">' + escapeHtml(item.body || '') + '</textarea></label>';
-      } else {
-        fieldsHtml =
-          '<label class="full">Title<input type="text" class="input" id="aceName" value="' + escapeAttr(item.title) + '" required></label>' +
-          '<label class="full">Language<input type="text" class="input" id="aceLang" value="' + escapeAttr(item.lang || '') + '"></label>' +
-          '<label class="full">Code<textarea class="input" id="aceBody">' + escapeHtml(item.code || '') + '</textarea></label>';
-      }
-      var backTab = type + 's';
-      openModal(
-        '<h2>Edit ' + type + '</h2><p class="modal-subtitle">Owned by ' + escapeHtml(item.owner_name) + ' (' + escapeHtml(item.owner_email) + ')</p>' +
-        '<form id="adminContentEditForm" class="admin-edit-form">' + fieldsHtml +
-          '<div class="modal-footer"><button type="button" class="ghost-btn" data-admin-action="back-to-content" data-content-type="' + type + '">Cancel</button><button type="submit" class="primary-btn" id="aceSubmit">Save changes</button></div>' +
-        '</form>'
-      );
-      document.getElementById('adminContentEditForm').addEventListener('submit', function(e){
-        e.preventDefault();
-        var btn = document.getElementById('aceSubmit');
-        btn.disabled = true;
-        var payload = { type: type, id: item.id, userId: item.user_id };
-        if (type === 'project') {
-          payload.name = document.getElementById('aceName').value;
-          payload.tech = document.getElementById('aceTech').value;
-          payload.description = document.getElementById('aceBody').value;
-        } else if (type === 'note') {
-          payload.title = document.getElementById('aceName').value;
-          payload.body = document.getElementById('aceBody').value;
-        } else {
-          payload.title = document.getElementById('aceName').value;
-          payload.lang = document.getElementById('aceLang').value;
-          payload.code = document.getElementById('aceBody').value;
-        }
-        adminPost('update-content', payload).then(function(res){
-          if (!res.ok) { btn.disabled = false; alert(res.error || 'Could not save changes.'); return; }
-          adminState.tab = backTab;
-          refreshAdminData();
-        });
-      });
-    }
-
-    /* ---------- Dashboard shell ---------- */
-
-    function renderAdminPanel() {
-      setModalWide(true);
-      var data = adminState.data;
-      var c = data.counts || {};
-      var tabs = [
-        { id: 'overview', label: 'Overview' },
-        { id: 'users', label: 'Users (' + (c.users || 0) + ')' },
-        { id: 'projects', label: 'Projects (' + (c.projects || 0) + ')' },
-        { id: 'notes', label: 'Notes (' + (c.notes || 0) + ')' },
-        { id: 'snippets', label: 'Snippets (' + (c.snippets || 0) + ')' },
-        { id: 'security', label: 'Security' }
-      ];
-      var tabsHtml = tabs.map(function(tb){
-        return '<button type="button" class="admin-tab' + (adminState.tab === tb.id ? ' active' : '') + '" data-admin-tab="' + tb.id + '">' + tb.label + '</button>';
-      }).join('');
-
-      var body;
-      if (adminState.tab === 'overview') { body = renderOverviewTab(data); }
-      else if (adminState.tab === 'users') { body = renderUsersTab(data); }
-      else if (adminState.tab === 'security') { body = renderSecurityTab(data); }
-      else { body = renderContentTab(data, adminState.tab); }
-
-      openModal(
-        '<div class="admin-panel-head">' +
-          '<div><span class="section-kicker">ADMIN CONTROL</span><h2>Project administration</h2><p class="modal-subtitle">Manage every account and every piece of content stored in this A-DevTools install.</p></div>' +
-          '<button type="button" class="ghost-btn" data-admin-action="lock"><i class="bx bx-lock-alt"></i> Lock</button>' +
-        '</div>' +
-        '<div class="admin-tabs" role="tablist">' + tabsHtml + '</div>' +
-        '<div class="admin-tab-body">' + body + '</div>' +
-        '<div class="modal-footer"><button class="ghost-btn" data-close-modal>Close</button></div>'
-      );
-      adminBtn.classList.add('is-unlocked');
-    }
-
-    function refreshAdminData() {
-      adminPost('stats').then(function(res){
-        if (!res.ok) { alert(res.error || 'Could not refresh Admin Control.'); return; }
-        adminState.data = res;
-        renderAdminPanel();
-      });
-    }
-
-    function openAdminPanel() {
-      adminPost('stats').then(function(res){
-        if (!res.ok) { renderAdminUnlockForm(res.error || 'Admin Control is locked.'); return; }
-        adminState.data = res;
-        adminState.tab = 'overview';
-        adminState.queries = { users: '', projects: '', notes: '', snippets: '' };
-        renderAdminPanel();
-      });
-    }
-
-    function renderAdminUnlockForm(errorMsg) {
-      setModalWide(false);
-      openModal(
-        '<h2><i class="bx bxs-shield-alt-2"></i> Admin Control</h2>' +
-        '<p class="modal-subtitle">Sign in with an admin-role account to manage this A-DevTools install.</p>' +
-        (errorMsg ? '<div class="auth-error">' + escapeHtml(errorMsg) + '</div>' : '') +
-        '<form class="admin-unlock-form" id="adminUnlockForm">' +
-          '<label class="full">Email<input type="email" id="adminUnlockEmail" class="input" autocomplete="username" required></label>' +
-          '<label class="full">Password<input type="password" id="adminUnlockPassword" class="input" autocomplete="current-password" required></label>' +
-          '<p class="admin-unlock-hint">This is separate from the regular Community login above.</p>' +
-          '<div class="modal-footer"><button type="button" class="ghost-btn" data-close-modal>Cancel</button><button type="submit" class="primary-btn" id="adminUnlockSubmit"><i class="bx bx-lock-open-alt"></i> Unlock</button></div>' +
-        '</form>'
-      );
-      var form = document.getElementById('adminUnlockForm');
-      if (form) {
-        form.addEventListener('submit', function(e){
-          e.preventDefault();
-          var email = document.getElementById('adminUnlockEmail').value || '';
-          var password = document.getElementById('adminUnlockPassword').value || '';
-          var submitBtn = document.getElementById('adminUnlockSubmit');
-          if (submitBtn) submitBtn.disabled = true;
-          adminPost('unlock', {email: email, password: password}).then(function(res){
-            if (!res.ok) {
-              if (submitBtn) submitBtn.disabled = false;
-              renderAdminUnlockForm(res.error || 'Could not unlock Admin Control.');
-              return;
-            }
-            openAdminPanel();
-          });
-        });
-      }
-    }
-
-    adminBtn.addEventListener('click', function(){
-      adminPost('status').then(function(res){
-        if (res.ok && res.unlocked) { openAdminPanel(); }
-        else { renderAdminUnlockForm(); }
-      });
-    });
-
-    if (modalBody) {
-      // Live client-side search: filters the already-fetched arrays and
-      // patches just the table wrapper, so the input never loses focus.
-      modalBody.addEventListener('input', function(e){
-        var el = e.target;
-        if (!el || !el.matches || !el.matches('[data-admin-search]')) return;
-        var type = el.dataset.adminSearch;
-        adminState.queries[type] = el.value;
-        var wrap;
-        if (type === 'users') {
-          wrap = document.getElementById('adminUsersWrap');
-          if (wrap) wrap.innerHTML = renderUsersTable(adminState.data.users || [], el.value);
-        } else {
-          wrap = document.getElementById('admin' + capitalize(type) + 'Wrap');
-          if (wrap) wrap.innerHTML = renderContentTable((adminState.data.content && adminState.data.content[type]) || [], el.value, type);
-        }
-      });
-
-      modalBody.addEventListener('click', function(e){
-        var tabBtn = e.target.closest('[data-admin-tab]');
-        if (tabBtn) {
-          adminState.tab = tabBtn.dataset.adminTab;
-          renderAdminPanel();
-          return;
-        }
-
-        var el = e.target.closest('[data-admin-action]');
-        if (!el) return;
-        var action = el.dataset.adminAction;
-
-        if (action === 'lock') {
-          adminPost('lock').then(function(){ adminBtn.classList.remove('is-unlocked'); closeModal(); });
-          return;
-        }
-        if (action === 'set-role') {
-          adminPost('set-role', {userId: el.dataset.userId, role: el.dataset.role}).then(function(res){
-            if (!res.ok) { alert(res.error || 'Could not update role.'); return; }
-            refreshAdminData();
-          });
-          return;
-        }
-        if (action === 'delete-user') {
-          if (!confirm('Delete the account "' + el.dataset.userName + '" and all of its projects, snippets and notes? This can\'t be undone.')) return;
-          adminPost('delete-user', {userId: el.dataset.userId}).then(function(res){
-            if (!res.ok) { alert(res.error || 'Could not delete account.'); return; }
-            refreshAdminData();
-          });
-          return;
-        }
-        if (action === 'clear-lockout') {
-          adminPost('clear-lockout', {key: el.dataset.key}).then(function(res){
-            if (!res.ok) { alert(res.error || 'Could not clear lockout.'); return; }
-            refreshAdminData();
-          });
-          return;
-        }
-        if (action === 'edit-user') {
-          var u = findUser(el.dataset.userId);
-          if (u) renderUserEditForm(u);
-          return;
-        }
-        if (action === 'edit-points') {
-          var u2 = findUser(el.dataset.userId);
-          if (u2) renderPointsEditForm(u2);
-          return;
-        }
-        if (action === 'back-to-users') {
-          adminState.tab = 'users';
-          renderAdminPanel();
-          return;
-        }
-        if (action === 'back-to-content') {
-          adminState.tab = el.dataset.contentType + 's';
-          renderAdminPanel();
-          return;
-        }
-        if (action === 'edit-content') {
-          var listKey = el.dataset.contentType + 's';
-          var item = findContentItem(listKey, el.dataset.contentId, el.dataset.userId);
-          if (item) renderContentEditForm(item, el.dataset.contentType);
-          return;
-        }
-        if (action === 'delete-content') {
-          if (!confirm('Delete "' + el.dataset.contentTitle + '"? This can\'t be undone.')) return;
-          adminPost('delete-content', {type: el.dataset.contentType, id: el.dataset.contentId, userId: el.dataset.userId}).then(function(res){
-            if (!res.ok) { alert(res.error || 'Could not delete.'); return; }
-            refreshAdminData();
-          });
-          return;
-        }
-      });
-    }
-  }
+  /* Admin Control is now a full-page dashboard (admin-dashboard.php); the
+     footer shield is a plain link, so no modal code is needed here. */
 })();
 </script>
 <script src="assets/js/i18n.js?v=<?php echo (int)$i18nVersion; ?>"></script>

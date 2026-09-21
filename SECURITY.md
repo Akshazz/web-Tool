@@ -1,6 +1,6 @@
 # Folder layout, by security level
 
-The app root (`a-devtools/`, wherever it sits under `htdocs/`) is entirely
+The app root (`a-codeplayground/`, wherever it sits under `htdocs/`) is entirely
 web-reachable by default in a XAMPP install, so the folders below are
 organized from **most exposed** to **most protected**, and every tier below
 "Public" is closed off with its own `.htaccess` (`Require all denied`) in
@@ -13,17 +13,24 @@ auth.php               login / register / logout endpoint
 oauth.php              "Sign in with..." callback endpoint
 guest.php              landing page (included by index.php)
 save-data.php          AJAX save/backup endpoint (session-gated)
-admin.php              admin panel endpoint (password + role gated, see below)
+gdrive.php             Google Drive backup endpoint (session-gated, CSRF-checked; tokens encrypted at rest, key in data/.security/)
+admin-dashboard.php    admin dashboard page (full-page sign-in, role gated)
+admin.php              admin dashboard JSON API (password + role gated, see below)
 service-worker.js, manifest.webmanifest   PWA files
 assets/                CSS, JS, icons — static, non-sensitive
 downloads/             the Android APK drop folder + its own README
 ```
-`admin.php` stays web-reachable because it *is* a browser-facing panel, but
-it has no page of its own to render without a correct admin password —
-folder-blocking it would just break the feature. Its protection is
-entirely at the application layer: a throttled, `password_hash()`-verified
-check against a user with `role = 'admin'` (see `core/security.php`'s
-`login_is_locked()` family, shared with the regular login form).
+`admin-dashboard.php` and `admin.php` stay web-reachable because they are the
+browser-facing admin backend, but neither reveals anything without a correct
+admin password: the dashboard page checks the session on the server *before*
+sending any markup (signed-out visitors only ever get the sign-in screen), and
+every API action re-checks it. Protection is at the application layer: a
+throttled, `password_hash()`-verified check against a user with
+`role = 'admin'` (see `core/security.php`'s `login_is_locked()` family, shared
+with the regular login form), an idle timeout (`ADMIN_IDLE_TIMEOUT` in
+`core/auth-helpers.php`, 20 minutes by default), CSRF tokens on every action,
+and an audit log of sign-ins and changes in `data/.security/admin-audit.log`
+(blocked from the web by `data/.htaccess`).
 
 ## 2. Internal-only PHP — never requested, only `require`d
 ```
@@ -31,6 +38,11 @@ core/
   config.php          MySQL host/user/password + OAuth client secrets
   db.php              shared PDO connection, built from config.php
   security.php        sessions, CSRF, security headers, login throttle
+  google.php          Google OAuth settings saved from the admin dashboard
+                      (data/.security/google-settings.json; secret AES-encrypted)
+  oauth-providers.php GitHub + Facebook sign-in settings saved from the admin dashboard
+                      (data/.security/oauth-settings.json; secrets AES-encrypted with
+                      the same key as Google's)
   auth-helpers.php     account lookups/creation (uses db.php)
 ```
 Blocked by `core/.htaccess`. Every public entry point pulls these in with
@@ -49,7 +61,7 @@ in-code check).
 
 ## 4. SQL schema / migrations — imported by hand, never fetched
 ```
-sql/        e.g. a-devtools-schema.sql       (initial schema)
+sql/        e.g. a-codeplayground-schema.sql       (initial schema)
 database/   e.g. admin-migration.sql          (adds the `role` column)
             e.g. points-migration.sql         (adds the `points` table)
 ```

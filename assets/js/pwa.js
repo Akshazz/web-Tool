@@ -63,15 +63,21 @@
   if (isStandalone()) setInstalledState();
 
   window.addEventListener('beforeinstallprompt', function (e) {
+    // Only take over the browser's install prompt on pages that actually have an
+    // Install button to fire it from later (guest.php). Elsewhere (the logged-in
+    // app) there's no button, so calling preventDefault() would just suppress
+    // Chrome's own install UI and log "Banner not shown: beforeinstallpromptevent
+    // .preventDefault() called..." to the console — with nothing ever using the event.
+    if (!installBtn) return;
     e.preventDefault();
     deferredPrompt = e;
-    if (installBtn) installBtn.hidden = false;
+    installBtn.hidden = false;
   });
 
   window.addEventListener('appinstalled', function () {
     deferredPrompt = null;
     setInstalledState();
-    toast('A-DevTools installed');
+    toast('A-Code Playground installed');
   });
 
   var ua = navigator.userAgent || '';
@@ -79,12 +85,12 @@
   var isSafari = isIOS && /safari/i.test(ua) && !/crios|fxios/i.test(ua);
 
   installBtn && installBtn.addEventListener('click', function () {
-    if (isStandalone()) { toast('A-DevTools is already installed'); return; }
+    if (isStandalone()) { toast('A-Code Playground is already installed'); return; }
 
     if (deferredPrompt) {
       deferredPrompt.prompt();
       deferredPrompt.userChoice.then(function (choice) {
-        if (choice.outcome === 'accepted') toast('Installing A-DevTools…');
+        if (choice.outcome === 'accepted') toast('Installing A-Code Playground…');
         deferredPrompt = null;
       });
       return;
@@ -97,7 +103,7 @@
         '<ol style="line-height:1.9;padding-left:18px">' +
         '<li>Tap the <b>Share</b> icon in Safari\'s toolbar <i class="bx bx-export"></i></li>' +
         '<li>Scroll down and tap <b>Add to Home Screen</b></li>' +
-        '<li>Tap <b>Add</b> — A-DevTools will open full-screen from your Home Screen from then on.</li>' +
+        '<li>Tap <b>Add</b> — A-Code Playground will open full-screen from your Home Screen from then on.</li>' +
         '</ol>' +
         '<div class="modal-footer"><button class="primary-btn" data-close-modal>Got it</button></div>'
       );
@@ -105,7 +111,7 @@
     }
 
     openModal(
-      '<h2>Install A-DevTools</h2>' +
+      '<h2>Install A-Code Playground</h2>' +
       '<p class="modal-subtitle">Your browser has not offered an install prompt yet.</p>' +
       '<p class="muted">Look for an install icon in the address bar, or open your browser menu and choose <b>Install app…</b> / <b>Add to Home screen</b>. If you are running this over plain <code>http://</code> on a non-localhost address, installing requires HTTPS first.</p>' +
       '<div class="modal-footer"><button class="primary-btn" data-close-modal>Got it</button></div>'
@@ -260,7 +266,7 @@
   langDropdown && langDropdown.addEventListener('click', function (e) {
     var opt = e.target.closest('[data-lang]');
     if (!opt) return;
-    window.ADevToolsI18n && window.ADevToolsI18n.setLanguage(opt.dataset.lang);
+    window.ACodePlaygroundI18n && window.ACodePlaygroundI18n.setLanguage(opt.dataset.lang);
     closeLangDropdown();
     langBtn && langBtn.focus();
   });

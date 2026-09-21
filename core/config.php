@@ -1,9 +1,9 @@
 <?php
 /**
- * MySQL connection settings for A-DevTools.
+ * MySQL connection settings for A-Code Playground.
  *
  * Defaults match a fresh XAMPP install (MySQL on localhost, root user,
- * no password, database name from sql/a-devtools-schema.sql). Edit the
+ * no password, database name from sql/a-codeplayground-schema.sql). Edit the
  * values below to match your own setup.
  *
  * Nothing else in the app needs to change — db.php reads this file to
@@ -12,7 +12,7 @@
 return array(
     'host'    => '127.0.0.1',
     'port'    => 3306,
-    'dbname'  => 'a_devtools',
+    'dbname'  => 'a_codeplayground',
     'user'    => 'root',
     'pass'    => '',
     'charset' => 'utf8mb4',
@@ -27,14 +27,18 @@ return array(
      * slash difference):
      *   Google   https://console.cloud.google.com/apis/credentials
      *            -> redirect URI: {base_url}/oauth.php?provider=google
+     *            -> ALSO add {base_url}/gdrive.php as a second redirect URI
+     *               and enable the "Google Drive API" — the same client ID and
+     *               secret then power the per-account "Google Drive backup"
+     *               in Settings (see README, "Google Drive backup").
      *   GitHub   https://github.com/settings/developers -> "OAuth Apps"
      *            -> Authorization callback URL: {base_url}/oauth.php?provider=github
      *   Facebook https://developers.facebook.com/apps -> "Facebook Login" product
      *            -> Valid OAuth Redirect URI: {base_url}/oauth.php?provider=facebook
      */
     'oauth' => array(
-        // e.g. 'https://your-domain.com/A-DevTools' — no trailing slash.
-        'base_url' => 'http://localhost/A-DevTools',
+        // e.g. 'https://your-domain.com/A-CodePlayground' — no trailing slash.
+        'base_url' => 'http://localhost/A-CodePlayground',
         'google' => array(
             'client_id'     => '',
             'client_secret' => '',
