@@ -3,6 +3,7 @@ require_once __DIR__ . '/core/security.php';
 acodeplayground_start_session();
 acodeplayground_security_headers();
 require_once __DIR__ . '/core/auth-helpers.php';
+require_once __DIR__ . '/core/legal-content.php';
 $currentUser = currentUser();
 
 // Landing / login / signup are public "Community" pages with their own
@@ -34,13 +35,13 @@ $pages = array(
     'php' => 'PHP Playground',
     'sql' => 'SQL Playground',
     'playground' => 'Combined Playground',
-    'php-sample' => 'PHP Sample',
-    'components' => 'UI Components',
-    'snippets' => 'Snippets',
-    'projects' => 'Projects',
-    'notes' => 'Notes',
+    'php-sample' => 'PHP Examples',
+    'components' => 'Components',
+    'snippets' => 'Code Snippets',
+    'projects' => 'My Projects',
+    'notes' => 'My Notes',
     'settings' => 'Settings',
-    'ui-guide' => 'UI/UX Guide'
+    'ui-guide' => 'Design Guide'
 );
 // "Saved" pages live in their own sidebar section (not the WORKSPACE loop
 // above), but are otherwise normal pages with their own body — kept in a
@@ -88,6 +89,17 @@ if (!function_exists('render_nav_link')) {
             . '<span class="nav-icon"><i class="' . e($icons[$key === 'ui-guide' ? 'guide' : $key]) . '"></i></span>'
             . '<span class="nav-text" data-i18n="nav.' . e($key) . '">' . e($label) . '</span>'
             . '</a>' . "\n";
+    }
+}
+/* Small uppercase divider inside the Playgrounds dropdown, grouping the four
+   playgrounds by where the code they teach actually runs: Code Playground is
+   client-side (HTML/CSS/JS in the browser); PHP and SQL Playground are
+   server-side languages (run here via WebAssembly, not a real server, but
+   the language and skills are backend); Combined Playground touches both in
+   one editor, so it gets its own "Full-Stack" group rather than either. */
+if (!function_exists('render_nav_category_label')) {
+    function render_nav_category_label($text, $i18nKey) {
+        echo '<div class="nav-sub-label"' . ($i18nKey ? ' data-i18n="' . e($i18nKey) . '"' : '') . '>' . e($text) . '</div>' . "\n";
     }
 }
 $icons = array(
@@ -201,6 +213,7 @@ $icons = array(
     </div>
 
     <aside class="sidebar" id="sidebar" role="navigation" aria-label="Workspace navigation">
+        <div class="sidebar-scroll">
         <button type="button" class="nav-item side-cta" id="newProject" title="New Project"><span class="nav-icon"><i class="bx bx-plus"></i></span><span class="nav-text" data-i18n="qt.newProject">New Project</span></button>
         <div class="side-section">
             <div class="side-label" data-i18n="side.workspace">WORKSPACE</div>
@@ -225,13 +238,23 @@ $icons = array(
                     </button>
                     <div class="nav-group-body" id="navGroupBody" role="group" aria-label="Playgrounds">
                         <div class="nav-sub"><div class="nav-sub-list">
-                            <?php foreach ($playgroundKeys as $pk) { render_nav_link($pk, $pages[$pk], $page, $icons); } ?>
+                            <?php render_nav_category_label('Frontend', 'nav.groupFrontend'); ?>
+                            <?php render_nav_link('code', 'PLAY Code', $page, $icons); ?>
+                            <?php render_nav_category_label('Backend', 'nav.groupBackend'); ?>
+                            <?php render_nav_link('php', 'PLAY PHP', $page, $icons); ?>
+                            <?php render_nav_link('sql', 'PLAY SQL', $page, $icons); ?>
+                            <?php render_nav_category_label('Full-Stack', 'nav.groupFullstack'); ?>
+                            <?php render_nav_link('playground', 'PLAY All', $page, $icons); ?>
                         </div></div>
                     </div>
                 </div>
             <?php
                     continue;
                 endif;
+                // Settings now lives only as the gear icon in the sidebar footer
+                // (next to "Local workspace · <level>"), not as a WORKSPACE row —
+                // ?page=settings stays a valid page either way.
+                if ($key === 'settings') { continue; }
                 render_nav_link($key, $label, $page, $icons);
             endforeach;
             ?>
@@ -253,17 +276,24 @@ $icons = array(
             <div class="side-label" data-i18n="side.quickTools">QUICK TOOLS</div>
             <button class="nav-item" id="recycleBinBtn" title="Recycle Bin"><span class="nav-icon"><i class="bx bx-trash"></i></span><span class="nav-text">Recycle Bin</span><span class="nav-count hidden" id="trashCount">0</span></button>
             <?php if ($experienceLevel === null || $experienceLevel === 'beginner'): ?>
-            <button class="nav-item" id="quickTour" title="Guided Tour"><span class="nav-icon"><i class="bx bx-compass"></i></span><span class="nav-text" data-i18n="qt.guidedTour">Guided Tour</span></button>
+            <button class="nav-item" id="quickTour" title="Take a Tour"><span class="nav-icon"><i class="bx bx-compass"></i></span><span class="nav-text" data-i18n="qt.guidedTour">Take a Tour</span></button>
             <?php endif; ?>
         </div>
-        <div class="sidebar-bottom"><span class="status-dot"></span><span><span data-i18n="side.localWorkspace">Local workspace</span> · <?php echo e($experienceLabel); ?></span></div>
+        </div>
+        <div class="sidebar-bottom"><a class="nav-item sidebar-bottom-settings<?php echo $page === 'settings' ? ' active' : ''; ?>" id="sidebarBottomSettings" href="?page=settings" title="Settings"<?php echo $page === 'settings' ? ' aria-current="page"' : ''; ?>><span class="nav-icon"><i class="bx bx-cog"></i></span><span class="nav-text" data-i18n="nav.settings">Settings</span></a></div>
     </aside>
     <?php /* Shown instead of the inline dropdown while the sidebar is minimized to its icon rail. Kept
              outside <aside> so the rail's icons-only styles don't apply to it. Hidden by the browser
              until opened; see the "Playgrounds popover" block in app.js. */ ?>
     <div class="nav-flyout" id="navFlyout" popover="manual" role="group" aria-label="Playgrounds">
         <div class="nav-flyout-title" data-i18n="nav.playgrounds">Playgrounds</div>
-        <?php foreach ($playgroundKeys as $pk) { render_nav_link($pk, $pages[$pk], $page, $icons); } ?>
+        <?php render_nav_category_label('Frontend', 'nav.groupFrontend'); ?>
+        <?php render_nav_link('code', 'PLAY Code', $page, $icons); ?>
+        <?php render_nav_category_label('Backend', 'nav.groupBackend'); ?>
+        <?php render_nav_link('php', 'PLAY PHP', $page, $icons); ?>
+        <?php render_nav_link('sql', 'PLAY SQL', $page, $icons); ?>
+        <?php render_nav_category_label('Full-Stack', 'nav.groupFullstack'); ?>
+        <?php render_nav_link('playground', 'PLAY All', $page, $icons); ?>
     </div>
     <div class="sidebar-backdrop" id="sidebarBackdrop" hidden></div>
 
@@ -299,7 +329,7 @@ $icons = array(
             <section class="page-head"><div><div class="eyebrow" data-i18n="dash.pro.eyebrow">WORKSPACE</div><h1 data-i18n="dash.pro.title">Dashboard</h1><p data-i18n="dash.pro.subtitle">Projects, snippets, notes and the playground, in one local workspace.</p></div></section>
             <section class="panel streak-week-panel streak-week-compact" id="streakWeekPanel">
                 <div class="panel-head">
-                    <div><h2><i class="bx bx-calendar-check"></i> 7-Day Streak</h2><p class="muted" style="margin:4px 0 0">Claim once a day — Day 7 unlocks a final bonus, then the week starts again.</p></div>
+                    <div><h2><i class="bx bx-calendar-check"></i> Daily Login</h2><p class="muted" style="margin:4px 0 0">Log in once a day — Day 7 unlocks a final bonus, then the week starts again.</p></div>
                     <span class="progress-label" id="streakDayLabel"><i class="bx bxs-flame"></i> Day 1 of 7</span>
                 </div>
                 <div class="streak-week-grid" id="streakWeekGrid">
@@ -372,7 +402,7 @@ $icons = array(
             </section>
             <section class="panel streak-week-panel streak-week-compact" id="streakWeekPanel">
                 <div class="panel-head">
-                    <div><h2><i class="bx bx-calendar-check"></i> 7-Day Streak</h2><p class="muted" style="margin:4px 0 0">Claim once a day — Day 7 unlocks a final bonus, then the week starts again.</p></div>
+                    <div><h2><i class="bx bx-calendar-check"></i> Daily Login</h2><p class="muted" style="margin:4px 0 0">Log in once a day — Day 7 unlocks a final bonus, then the week starts again.</p></div>
                     <span class="progress-label" id="streakDayLabel"><i class="bx bxs-flame"></i> Day 1 of 7</span>
                 </div>
                 <div class="streak-week-grid" id="streakWeekGrid">
@@ -446,7 +476,7 @@ $icons = array(
             </section>
             <section class="panel streak-week-panel streak-week-compact" id="streakWeekPanel">
                 <div class="panel-head">
-                    <div><h2><i class="bx bx-calendar-check"></i> 7-Day Streak</h2><p class="muted" style="margin:4px 0 0">Claim once a day — Day 7 unlocks a final bonus, then the week starts again.</p></div>
+                    <div><h2><i class="bx bx-calendar-check"></i> Daily Login</h2><p class="muted" style="margin:4px 0 0">Log in once a day — Day 7 unlocks a final bonus, then the week starts again.</p></div>
                     <span class="progress-label" id="streakDayLabel"><i class="bx bxs-flame"></i> Day 1 of 7</span>
                 </div>
                 <div class="streak-week-grid" id="streakWeekGrid">
@@ -563,7 +593,16 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f6f
 h1{margin:8px 0;font-size:38px;letter-spacing:-.04em}
 p{color:#68707a;line-height:1.6}
 button{border:0;border-radius:10px;padding:11px 16px;background:#15171a;color:#fff;font-weight:700;cursor:pointer}
-button:hover{transform:translateY(-1px)}</textarea>
+button:hover{transform:translateY(-1px)}
+
+/* @media = a mobile-responsive rule: everything inside it only applies
+   when the browser (or, here, the preview) is narrower than 480px.
+   Switch the preview to "Mobile" above to see it turn on. */
+@media (max-width: 480px){
+  .demo{padding:22px;border-radius:14px}
+  h1{font-size:28px}
+  button{width:100%}
+}</textarea>
                         <textarea id="jsCode" class="code-editor hidden" spellcheck="false" aria-label="JavaScript editor">document.getElementById('demoButton')?.addEventListener('click',()=>{
   document.getElementById('demoButton').textContent='It works!';
 });</textarea>
@@ -838,7 +877,7 @@ button:hover{transform:translateY(-1px)}</textarea>
               $curLevelIdx = array_search($experienceLevel, $levelOrder, true);
               if ($curLevelIdx === false) { $curLevelIdx = -1; }
             ?>
-            <div class="settings-grid"><section class="panel"><h2 data-i18n="settings.appearance">Appearance</h2><label class="switch-row"><span data-i18n="settings.darkMode">Dark mode</span> <input type="checkbox" id="darkSetting"><span class="switch"></span></label><p class="muted" data-i18n="settings.themeNote">Theme is stored locally in your browser.</p></section><section class="panel"><h2 data-i18n="settings.experienceLevel">Experience level</h2><p class="muted"><span data-i18n="settings.currentLevel">Current level:</span> <span class="experience-badge" id="experienceBadge"><?php echo e($experienceLabel); ?></span></p><div class="level-trail" id="levelTrail"><?php foreach ($levelOrder as $i => $lvl): ?><?php if ($i > 0): ?><div class="level-trail-line<?php echo $i - 1 < $curLevelIdx ? ' done' : ''; ?>"></div><?php endif; ?><button type="button" class="level-trail-step<?php echo $i <= $curLevelIdx ? ' done' : ''; ?><?php echo $i === $curLevelIdx ? ' current' : ''; ?>" title="<?php echo e(ucfirst($lvl)); ?>"><span class="trail-dot"><i class="bx <?php echo $levelIcons[$lvl]; ?>"></i></span><span class="trail-label"><?php echo e(ucfirst($lvl)); ?></span></button><?php endforeach; ?></div><p class="muted" data-i18n="settings.experienceNote">This decides how much guidance is shown across the workspace.</p><button class="ghost-btn" id="changeExperienceBtn"><i class="bx bx-user-check"></i> <span data-i18n="settings.changeExperience">Change experience level</span></button><button class="ghost-btn" id="replayTour"><i class="bx bx-play"></i> <span data-i18n="settings.replayTour">Replay guided tour</span></button></section><section class="panel" id="localDiskBackup"><h2 data-i18n="settings.localBackup">Local disk backup</h2><p class="muted">Every project, snippet and note is mirrored to a dedicated folder on this computer — <code>C:\A-CodePlayground\BackupFiles</code> by default — so your work lives on disk, not only inside the browser.</p><div class="disk-status" id="diskStatusBody"><p class="muted">Checking local save status…</p></div><div class="disk-actions"><button class="ghost-btn" id="saveBackupBtn"><i class="bx bx-save"></i> <span data-i18n="settings.saveBackupNow">Save backup to disk now</span></button><button class="ghost-btn" id="downloadBackupBtn"><i class="bx bx-download"></i> <span data-i18n="settings.downloadBackupFile">Download backup file</span></button></div><div class="form-grid" style="margin-top:14px"><label class="full">Save location<input id="dataLocationInput" class="input" placeholder="Loading default location…" spellcheck="false" autocomplete="off" aria-describedby="dataLocationHint"></label><p class="field-hint is-error full" id="dataLocationHint" role="alert" hidden><i class="bx bx-x-circle"></i><span></span></p></div><p class="muted">Leave blank to use the automatic default (a dedicated <code>C:\A-CodePlayground\BackupFiles</code> folder, created for you the first time this runs — or the next available local drive if <code>C:</code> isn't usable), or enter a relative folder name (e.g. <code>my-backups</code>) or a full path (e.g. <code>D:\A-CodePlayground</code>) to save somewhere else instead. Pasting a path straight from Explorer’s “Copy as path” works too. Existing files are not moved automatically.</p><div class="disk-actions"><button class="ghost-btn" id="saveLocationBtn"><i class="bx bx-folder"></i> <span data-i18n="settings.saveLocation">Save location</span></button><button class="ghost-btn" id="resetLocationBtn"><i class="bx bx-reset"></i> <span data-i18n="settings.resetLocation">Reset to default</span></button></div><hr style="border:0;border-top:1px solid var(--border,#e5e7eb);margin:16px 0"><p class="muted"><b>Export / Import</b> — move your workspace to another computer, or restore an older copy.</p><div class="disk-actions"><button class="ghost-btn" id="importBackupBtn"><i class="bx bx-upload"></i> <span data-i18n="settings.importBackup">Import backup file</span></button><input type="file" id="importBackupInput" accept="application/json,.json" hidden></div></section><section class="panel" id="googleDriveBackup"><h2><i class="bx bxl-google"></i> Google Drive backup</h2><p class="muted">Sync a backup of your projects, snippets and notes to <b>your own</b> Google Drive. Each account connects its own Google account, and the app can only see the backup files it creates — never the rest of your Drive. XP and rank are not part of a backup.</p><div class="disk-status" id="gdriveBody"><p class="muted">Checking Google Drive…</p></div></section><section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section></div>
+            <div class="settings-grid"><section class="panel"><h2 data-i18n="settings.appearance">Appearance</h2><label class="switch-row"><span data-i18n="settings.darkMode">Dark mode</span> <input type="checkbox" id="darkSetting"><span class="switch"></span></label><p class="muted" data-i18n="settings.themeNote">Theme is stored locally in your browser.</p></section><section class="panel"><h2 data-i18n="settings.experienceLevel">Experience level</h2><p class="muted"><span data-i18n="settings.currentLevel">Current level:</span> <span class="experience-badge" id="experienceBadge"><?php echo e($experienceLabel); ?></span></p><div class="level-trail" id="levelTrail"><?php foreach ($levelOrder as $i => $lvl): ?><?php if ($i > 0): ?><div class="level-trail-line<?php echo $i - 1 < $curLevelIdx ? ' done' : ''; ?>"></div><?php endif; ?><button type="button" class="level-trail-step<?php echo $i <= $curLevelIdx ? ' done' : ''; ?><?php echo $i === $curLevelIdx ? ' current' : ''; ?>" title="<?php echo e(ucfirst($lvl)); ?>"><span class="trail-dot"><i class="bx <?php echo $levelIcons[$lvl]; ?>"></i></span><span class="trail-label"><?php echo e(ucfirst($lvl)); ?></span></button><?php endforeach; ?></div><p class="muted" data-i18n="settings.experienceNote">This decides how much guidance is shown across the workspace.</p><button class="ghost-btn" id="changeExperienceBtn"><i class="bx bx-user-check"></i> <span data-i18n="settings.changeExperience">Change experience level</span></button><button class="ghost-btn" id="replayTour"><i class="bx bx-play"></i> <span data-i18n="settings.replayTour">Replay guided tour</span></button></section><section class="panel" id="localDiskBackup"><h2 data-i18n="settings.localBackup">Local disk backup</h2><p class="muted">Every project, snippet and note is mirrored to a dedicated folder on this computer — <code>C:\A-CodePlayground\BackupFiles</code> by default — so your work lives on disk, not only inside the browser.</p><div class="disk-status" id="diskStatusBody"><p class="muted">Checking local save status…</p></div><div class="disk-actions"><button class="ghost-btn" id="saveBackupBtn"><i class="bx bx-save"></i> <span data-i18n="settings.saveBackupNow">Save backup to disk now</span></button><button class="ghost-btn" id="downloadBackupBtn"><i class="bx bx-download"></i> <span data-i18n="settings.downloadBackupFile">Download backup file</span></button></div><div class="form-grid" style="margin-top:14px"><label class="full">Save location<input id="dataLocationInput" class="input" placeholder="Loading default location…" spellcheck="false" autocomplete="off" aria-describedby="dataLocationHint"></label><p class="field-hint is-error full" id="dataLocationHint" role="alert" hidden><i class="bx bx-x-circle"></i><span></span></p></div><p class="muted">Leave blank to use the automatic default (a dedicated <code>C:\A-CodePlayground\BackupFiles</code> folder, created for you the first time this runs — or the next available local drive if <code>C:</code> isn't usable), or enter a relative folder name (e.g. <code>my-backups</code>) or a full path (e.g. <code>D:\A-CodePlayground</code>) to save somewhere else instead. Pasting a path straight from Explorer’s “Copy as path” works too. Existing files are not moved automatically.</p><div class="disk-actions"><button class="ghost-btn" id="saveLocationBtn"><i class="bx bx-folder"></i> <span data-i18n="settings.saveLocation">Save location</span></button><button class="ghost-btn" id="resetLocationBtn"><i class="bx bx-reset"></i> <span data-i18n="settings.resetLocation">Reset to default</span></button></div><hr style="border:0;border-top:1px solid var(--border,#e5e7eb);margin:16px 0"><p class="muted"><b>Export / Import</b> — move your workspace to another computer, or restore an older copy.</p><div class="disk-actions"><button class="ghost-btn" id="importBackupBtn"><i class="bx bx-upload"></i> <span data-i18n="settings.importBackup">Import backup file</span></button><input type="file" id="importBackupInput" accept="application/json,.json" hidden></div></section><section class="panel" id="googleDriveBackup"><h2><i class="bx bxl-google"></i> Google Drive backup</h2><p class="muted">Sync a backup of your projects, snippets and notes to <b>your own</b> Google Drive. Each account connects its own Google account, and the app can only see the backup files it creates — never the rest of your Drive. XP and rank are not part of a backup.</p><div class="disk-status" id="gdriveBody"><p class="muted">Checking Google Drive…</p></div></section><section class="panel legal-panel" id="aboutLegal"><h2 data-i18n="settings.aboutLegal">About &amp; Legal</h2><h3 class="legal-panel-subtitle"><i class="bx bx-lock-alt"></i> <span data-i18n="settings.privacyDpa">Privacy Policy &mdash; Data Privacy Act of 2012</span></h3><div class="legal-page" id="legalPageBody"><?php render_privacy_policy_intro(); ?><?php render_privacy_policy_sections(); ?></div></section><section class="panel"><div class="panel-head"><h2>Workspace activity</h2><span class="muted">Local</span></div><div id="activityList" class="activity-list"><div class="empty">No activity yet.</div></div></section></div>
         <?php endif; ?>
         </div>
     </main>
@@ -862,9 +901,16 @@ button:hover{transform:translateY(-1px)}</textarea>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/2.0.3/beautify-html.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>window.CSRF_TOKEN = <?php echo json_encode(csrf_token()); ?>;
+window.IDLE_TIMEOUT_MS = <?php echo (int)ACODEPLAYGROUND_IDLE_TIMEOUT * 1000; ?>;
 window.SERVER_EXPERIENCE_LEVEL = <?php echo json_encode($experienceLevel); ?>;
 window.CURRENT_USER_ID = <?php echo json_encode($currentUser['id']); ?>;
 window.CURRENT_USER_JOINED_AT = <?php echo json_encode($currentUser['joinedAt']); ?>;
+window.CURRENT_USER_PROFILE = <?php echo json_encode(array(
+    'bio' => isset($currentUser['bio']) ? $currentUser['bio'] : '',
+    'location' => isset($currentUser['location']) ? $currentUser['location'] : '',
+    'hobbies' => isset($currentUser['hobbies']) ? $currentUser['hobbies'] : '',
+    'skills' => isset($currentUser['skills']) ? $currentUser['skills'] : array(),
+)); ?>;
 window.SERVER_POINTS = <?php echo json_encode($serverPoints); ?>;
 window.GDRIVE = <?php echo json_encode($gdriveSummary); ?>;
 window.SERVER_CLOCK = <?php echo json_encode(array('now' => (int)round(microtime(true) * 1000), 'offset' => (int)date('Z'))); ?>;</script>

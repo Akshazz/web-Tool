@@ -150,7 +150,11 @@ CREATE TABLE `users` (
   `expertise_level` enum('beginner','intermediate','professional') DEFAULT NULL,
   `expertise_set_at` datetime DEFAULT NULL,
   `role` enum('user','admin') NOT NULL DEFAULT 'user',
-  `joined_at` datetime NOT NULL DEFAULT current_timestamp()
+  `joined_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `bio` varchar(280) DEFAULT NULL,
+  `location` varchar(120) DEFAULT NULL,
+  `hobbies` varchar(255) DEFAULT NULL,
+  `skills` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --

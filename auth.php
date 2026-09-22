@@ -8,6 +8,7 @@ acodeplayground_start_session();
 acodeplayground_security_headers();
 header('Content-Type: application/json');
 require_once __DIR__ . '/core/auth-helpers.php';
+require_once __DIR__ . '/core/access-settings.php';
 
 function respond($ok, $extra = array()) {
     echo json_encode(array_merge(array('ok' => $ok), $extra));
@@ -28,10 +29,14 @@ if ($action !== 'whoami' && !csrf_verify(isset($body['csrf']) ? $body['csrf'] : 
 try {
 
     if ($action === 'whoami') {
-        respond(true, array('user' => currentUser()));
+        respond(true, array('user' => currentUser(), 'access' => access_settings()));
     }
 
     if ($action === 'register') {
+        $access = access_settings();
+        if (!$access['signupEnabled']) {
+            respond(false, array('error' => access_unavailable_message('signup'), 'accessDisabled' => true));
+        }
         $name = trim((string)(isset($body['name']) ? $body['name'] : ''));
         $email = trim((string)(isset($body['email']) ? $body['email'] : ''));
         $password = (string)(isset($body['password']) ? $body['password'] : '');
@@ -56,6 +61,10 @@ try {
     }
 
     if ($action === 'login') {
+        $access = access_settings();
+        if (!$access['signinEnabled']) {
+            respond(false, array('error' => access_unavailable_message('signin'), 'accessDisabled' => true));
+        }
         $email = trim((string)(isset($body['email']) ? $body['email'] : ''));
         $password = (string)(isset($body['password']) ? $body['password'] : '');
 
@@ -98,6 +107,11 @@ try {
         $email = trim((string)(isset($body['email']) ? $body['email'] : ''));
         $currentPassword = (string)(isset($body['currentPassword']) ? $body['currentPassword'] : '');
         $newPassword = (string)(isset($body['newPassword']) ? $body['newPassword'] : '');
+        // "About" fields are all optional — an empty value just clears them.
+        $bio = trim((string)(isset($body['bio']) ? $body['bio'] : ''));
+        $location = trim((string)(isset($body['location']) ? $body['location'] : ''));
+        $hobbies = trim((string)(isset($body['hobbies']) ? $body['hobbies'] : ''));
+        $skillsInput = (isset($body['skills']) && is_array($body['skills'])) ? $body['skills'] : array();
 
         if ($name === '' || $email === '') {
             respond(false, array('error' => 'Name and email cannot be empty.'));
@@ -114,6 +128,34 @@ try {
                 respond(false, array('error' => 'Another account already uses that email.'));
             }
         }
+        if (mb_strlen($bio) > 280) {
+            respond(false, array('error' => 'Bio needs to be 280 characters or fewer.'));
+        }
+        if (mb_strlen($location) > 120) {
+            respond(false, array('error' => 'Location needs to be 120 characters or fewer.'));
+        }
+        if (mb_strlen($hobbies) > 255) {
+            respond(false, array('error' => 'Hobbies need to be 255 characters or fewer — try shortening the list.'));
+        }
+
+        // Skills come in as [{name, level}, ...]; keep only well-formed
+        // entries (a bad row from the client is dropped, not fatal) and cap
+        // the count so nobody can pad the column with an unbounded list.
+        $skillLevels = profileSkillLevels();
+        $skills = array();
+        foreach ($skillsInput as $s) {
+            if (count($skills) >= 25) { break; }
+            if (!is_array($s)) { continue; }
+            $skillName = trim((string)(isset($s['name']) ? $s['name'] : ''));
+            if ($skillName === '') { continue; }
+            if (mb_strlen($skillName) > 40) {
+                respond(false, array('error' => 'Skill names need to be 40 characters or fewer.'));
+            }
+            $skillLevel = trim((string)(isset($s['level']) ? $s['level'] : 'intermediate'));
+            if (!in_array($skillLevel, $skillLevels, true)) { $skillLevel = 'intermediate'; }
+            $skills[] = array('name' => $skillName, 'level' => $skillLevel);
+        }
+        $skillsJson = empty($skills) ? null : json_encode($skills);
 
         $passwordHash = $raw['password_hash'];
         if ($newPassword !== '') {
@@ -129,8 +171,15 @@ try {
             $passwordHash = password_hash($newPassword, PASSWORD_DEFAULT);
         }
 
-        $stmt = getDb()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ? WHERE id = ?');
-        $stmt->execute(array($name, $email, $passwordHash, $raw['id']));
+        $stmt = getDb()->prepare('UPDATE users SET name = ?, email = ?, password_hash = ?, bio = ?, location = ?, hobbies = ?, skills = ? WHERE id = ?');
+        $stmt->execute(array(
+            $name, $email, $passwordHash,
+            $bio !== '' ? $bio : null,
+            $location !== '' ? $location : null,
+            $hobbies !== '' ? $hobbies : null,
+            $skillsJson,
+            $raw['id'],
+        ));
 
         respond(true, array('user' => publicUser(findUserById($raw['id']))));
     }

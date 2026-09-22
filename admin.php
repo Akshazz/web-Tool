@@ -26,7 +26,8 @@
  *   users     : create-user, update-user, set-role, set-points,
  *               reset-password, delete-user, bulk-set-role, bulk-delete
  *   content   : update-content, delete-content
- *   security  : clear-lockout, clear-all-lockouts
+ *   security  : clear-lockout, clear-all-lockouts, access-save
+ *               (access-save toggles Sign in / Sign up sitewide; see core/access-settings.php)
  *   google    : google-save, google-clear, google-test,
  *               google-disconnect-user, google-disconnect-all
  *               (Integrations → Google Drive; see core/google.php)
@@ -92,6 +93,7 @@ require_once __DIR__ . '/core/auth-helpers.php';
 require_once __DIR__ . '/core/db.php';
 require_once __DIR__ . '/core/google.php';
 require_once __DIR__ . '/core/oauth-providers.php';
+require_once __DIR__ . '/core/access-settings.php';
 
 function respond($ok, $extra = array()) {
     echo json_encode(array_merge(array('ok' => $ok), $extra), JSON_INVALID_UTF8_SUBSTITUTE);
@@ -307,6 +309,17 @@ function oauth_admin_payload() {
         );
     }
     return $out;
+}
+
+/** Sign in / Sign up availability for the Security page. See core/access-settings.php. */
+function access_admin_payload() {
+    $a = access_settings();
+    return array(
+        'signinEnabled' => (bool)$a['signinEnabled'],
+        'signupEnabled' => (bool)$a['signupEnabled'],
+        'updatedAt' => $a['updatedAt'],
+        'updatedBy' => $a['updatedBy'],
+    );
 }
 
 function system_info($db, $lockoutCount, $adminCount) {
@@ -556,6 +569,9 @@ try {
                 'links' => array(),
             )),
             'oauth' => admin_safe('oauth panel', function () { return oauth_admin_payload(); }, array()),
+            'access' => admin_safe('access panel', function () { return access_admin_payload(); }, array(
+                'signinEnabled' => true, 'signupEnabled' => true, 'updatedAt' => null, 'updatedBy' => null,
+            )),
             'admin' => array('id' => $admin['id'], 'name' => $admin['name'], 'email' => $admin['email']),
             'session' => array('secondsLeft' => adminSessionSecondsLeft(), 'timeout' => ADMIN_IDLE_TIMEOUT),
             'generatedAt' => time(),
@@ -649,7 +665,10 @@ try {
             $stmt = $db->prepare('UPDATE notes SET title = ?, body = ? WHERE id = ? AND user_id = ?');
             $stmt->execute(array($title, bodyStr('body'), $id, $ownerId));
             $label = $title;
-        } elseif ($type === 'snippet') {
+        } elseif ($type === 'snippet' || $type === 'component') {
+            // Saved Components (from the UI Components library) live in this
+            // same `snippets` table as plain snippets — see the CONTENT.components
+            // comment in assets/js/admin-dashboard.js.
             $title = trim(bodyStr('title'));
             if ($title === '') { respond(false, array('error' => 'Title is required.')); }
             $stmt = $db->prepare('UPDATE snippets SET title = ?, lang = ?, code = ? WHERE id = ? AND user_id = ?');
@@ -670,7 +689,7 @@ try {
         if ($id === null || $id === '' || $ownerId === '') {
             respond(false, array('error' => 'Missing content id.'));
         }
-        $tables = array('project' => 'projects', 'note' => 'notes', 'snippet' => 'snippets');
+        $tables = array('project' => 'projects', 'note' => 'notes', 'snippet' => 'snippets', 'component' => 'snippets');
         if (!isset($tables[$type])) {
             respond(false, array('error' => 'Invalid content type.'));
         }
@@ -812,7 +831,7 @@ try {
                     catch (PDOException $e) { /* table not created yet */ }
                 }
             } else {
-                $tables = array('project' => 'projects', 'note' => 'notes', 'snippet' => 'snippets');
+                $tables = array('project' => 'projects', 'note' => 'notes', 'snippet' => 'snippets', 'component' => 'snippets');
                 if (!isset($tables[$type])) {
                     $db->rollBack();
                     respond(false, array('error' => 'Invalid content type.'));
@@ -1061,7 +1080,7 @@ try {
                 'detail' => ($https || $local) ? $base : $label . ' expects https:// for a real domain (plain http is only accepted for localhost).');
         }
         if (!$s['enabled']) {
-            $checks[] = array('id' => 'enabled', 'label' => 'Sign-in switch', 'status' => 'warn', 'detail' => 'Credentials are saved but ' . $label . ' sign-in is switched off, so the button shows “turned off”.');
+            $checks[] = array('id' => 'enabled', 'label' => 'Sign-in switch', 'status' => 'warn', 'detail' => 'Credentials are saved but ' . $label . ' sign-in is switched off, so the button shows “currently unavailable”.');
         }
         if ($s['client_id'] === '' || $s['client_secret'] === '') {
             $checks[] = array('id' => 'creds', 'label' => $label . ' credentials', 'status' => 'bad', 'detail' => 'Enter and save the ' . ($provider === 'facebook' ? 'App ID and App secret' : 'client ID and client secret') . ' first.');
@@ -1078,6 +1097,18 @@ try {
     }
 
     /* ---- security ---------------------------------------------------- */
+
+    if ($action === 'access-save') {
+        $admin = requireAdmin();
+        $signinEnabled = !empty($body['signinEnabled']);
+        $signupEnabled = !empty($body['signupEnabled']);
+        if (!access_settings_save($signinEnabled, $signupEnabled, $admin['email'])) {
+            respond(false, array('error' => 'Could not write data/.security/access-settings.json — make sure the data folder is writable.'));
+        }
+        audit_log('Sign in / Sign up availability changed',
+            'Sign in ' . ($signinEnabled ? 'on' : 'off') . ' · Sign up ' . ($signupEnabled ? 'on' : 'off'));
+        respond(true, array('access' => access_admin_payload()));
+    }
 
     if ($action === 'clear-lockout') {
         requireAdmin();

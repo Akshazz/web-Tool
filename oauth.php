@@ -21,6 +21,7 @@ acodeplayground_security_headers();
 require_once __DIR__ . '/core/auth-helpers.php';
 require_once __DIR__ . '/core/google.php';
 require_once __DIR__ . '/core/oauth-providers.php';
+require_once __DIR__ . '/core/access-settings.php';
 
 $config = require __DIR__ . '/core/config.php';
 $oauthConfig = isset($config['oauth']) ? $config['oauth'] : array();
@@ -61,6 +62,14 @@ if (!in_array($provider, $providers, true)) {
     oauth_fail('Unknown sign-in provider.', $intent);
 }
 
+$access = access_settings();
+if ($intent === 'login' && !$access['signinEnabled']) {
+    oauth_fail(access_unavailable_message('signin'), $intent);
+}
+if ($intent === 'signup' && !$access['signupEnabled']) {
+    oauth_fail(access_unavailable_message('signup'), $intent);
+}
+
 $creds = isset($oauthConfig[$provider]) ? $oauthConfig[$provider] : array();
 $clientId = isset($creds['client_id']) ? trim((string)$creds['client_id']) : '';
 $clientSecret = isset($creds['client_secret']) ? trim((string)$creds['client_secret']) : '';
@@ -86,7 +95,7 @@ if ($provider === 'google') {
 if ($provider === 'github' || $provider === 'facebook') {
     $ps = oauth_provider_settings($provider);
     if ($ps['source'] === 'dashboard' && !$ps['enabled']) {
-        oauth_fail(oauth_provider_label($provider) . ' sign-in is turned off by the site owner.', $intent);
+        oauth_fail(oauth_provider_label($provider) . ' sign-in is currently unavailable — this feature is under review. Please check back soon.', $intent);
     }
     if ($ps['client_id'] !== '' && $ps['client_secret'] !== '') {
         $clientId = $ps['client_id'];

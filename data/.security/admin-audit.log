@@ -28,3 +28,17 @@
 {"t":1789988483,"event":"github connection tested","ok":false,"actor":"akshaz.masteh@gmail.com","detail":"1 problem(s) found","ip":"::1"}
 {"t":1789988537,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
 {"t":1789988682,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1790033696,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1790033981,"event":"github settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Sign-in on \u00b7 client Ov23lika2Op1\u2026","ip":"::1"}
+{"t":1790033981,"event":"github connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1790033981,"event":"github settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Sign-in on \u00b7 client Ov23lika2Op1\u2026","ip":"::1"}
+{"t":1790033982,"event":"github connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1790034265,"event":"github connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1790034272,"event":"facebook connection tested","ok":false,"actor":"akshaz.masteh@gmail.com","detail":"1 problem(s) found","ip":"::1"}
+{"t":1790034274,"event":"google connection tested","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"All checks passed","ip":"::1"}
+{"t":1790039029,"event":"facebook settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Sign-in off \u00b7 no client ID","ip":"::1"}
+{"t":1790042456,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}
+{"t":1790042472,"event":"facebook settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Sign-in off \u00b7 no client ID","ip":"::1"}
+{"t":1790042475,"event":"github settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Sign-in off \u00b7 client Ov23lika2Op1\u2026","ip":"::1"}
+{"t":1790042483,"event":"github settings saved","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Sign-in on \u00b7 client Ov23lika2Op1\u2026","ip":"::1"}
+{"t":1790043982,"event":"sign-in","ok":true,"actor":"akshaz.masteh@gmail.com","detail":"Signed in to Admin Control","ip":"::1"}

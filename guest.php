@@ -11,8 +11,96 @@
  */
 if (!defined('ACODEPLAYGROUND_SECURITY_LOADED')) { require_once __DIR__ . '/core/security.php'; }
 if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth-helpers.php'; }
+require_once __DIR__ . '/core/access-settings.php';
+require_once __DIR__ . '/core/google.php';
+require_once __DIR__ . '/core/oauth-providers.php';
+require_once __DIR__ . '/core/legal-content.php';
+$acpAccess = access_settings();
+/** Echoes an "under review" notice in place of a sign-in/sign-up form when that flow is switched off. */
+function acp_auth_notice($flow) {
+    $title = $flow === 'signup' ? 'Sign-ups are paused' : 'Sign-in is paused';
+    echo '<div class="auth-unavailable" role="status">' .
+        '<i class="bx bx-time-five"></i>' .
+        '<p><b>' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</b></p>' .
+        '<p class="muted">' . htmlspecialchars(access_unavailable_message($flow), ENT_QUOTES, 'UTF-8') . '</p>' .
+        '</div>';
+}
+
+/**
+ * Whether each "Sign in / Sign up with …" button can actually start an OAuth
+ * flow right now, worked out the same way oauth.php itself resolves
+ * credentials — so a button that's known to fail (provider switched off, or
+ * never configured) can say so instantly client-side instead of sending the
+ * browser to oauth.php only to be bounced straight back with an error (a
+ * visible page reload). Buttons that ARE available still go through the
+ * real redirect as before; only the already-known failures are short-circuited.
+ */
+function acp_oauth_button_states() {
+    $config = require __DIR__ . '/core/config.php';
+    $oauthConfig = isset($config['oauth']) && is_array($config['oauth']) ? $config['oauth'] : array();
+    $baseUrl = isset($oauthConfig['base_url']) ? rtrim((string)$oauthConfig['base_url'], '/') : '';
+    $gsAll = google_settings();
+    if ($gsAll['source'] === 'dashboard' && $gsAll['base_url'] !== '') { $baseUrl = $gsAll['base_url']; }
+
+    $out = array();
+    foreach (array('google', 'github', 'facebook') as $provider) {
+        $creds = isset($oauthConfig[$provider]) && is_array($oauthConfig[$provider]) ? $oauthConfig[$provider] : array();
+        $clientId = isset($creds['client_id']) ? trim((string)$creds['client_id']) : '';
+        $clientSecret = isset($creds['client_secret']) ? trim((string)$creds['client_secret']) : '';
+        $offMessage = null;
+
+        if ($provider === 'google') {
+            if ($gsAll['source'] === 'dashboard' && $gsAll['use_for_signin'] && $gsAll['client_id'] !== '' && $gsAll['client_secret'] !== '') {
+                $clientId = $gsAll['client_id'];
+                $clientSecret = $gsAll['client_secret'];
+            }
+        } else {
+            $ps = oauth_provider_settings($provider);
+            if ($ps['source'] === 'dashboard' && !$ps['enabled']) {
+                $offMessage = oauth_provider_label($provider) . ' sign-in is currently unavailable — this feature is under review. Please check back soon.';
+            } elseif ($ps['client_id'] !== '' && $ps['client_secret'] !== '') {
+                $clientId = $ps['client_id'];
+                $clientSecret = $ps['client_secret'];
+            }
+        }
+
+        if ($offMessage === null && ($clientId === '' || $clientSecret === '' || $baseUrl === '')) {
+            $offMessage = ucfirst($provider) . ' sign-in isn\'t set up yet. Please check back soon.';
+        }
+
+        $out[$provider] = array('available' => $offMessage === null, 'message' => $offMessage);
+    }
+    return $out;
+}
+$acpOauthButtons = acp_oauth_button_states();
+
+/** Renders the "or continue with" Google/GitHub/Facebook row for one intent (login|signup). */
+function acp_oauth_buttons($intent) {
+    global $acpOauthButtons;
+    $meta = array(
+        'google' => array('class' => 'oauth-google', 'icon' => 'bxl-google', 'label' => 'Google'),
+        'github' => array('class' => 'oauth-github', 'icon' => 'bxl-github', 'label' => 'GitHub'),
+        'facebook' => array('class' => 'oauth-facebook', 'icon' => 'bxl-facebook-circle', 'label' => 'Facebook'),
+    );
+    echo '<div class="oauth-buttons">';
+    foreach ($meta as $provider => $m) {
+        $st = $acpOauthButtons[$provider];
+        $verb = $intent === 'login' ? 'Sign in' : 'Sign up';
+        $attrs = 'class="oauth-btn ' . $m['class'] . '" aria-label="' . $verb . ' with ' . $m['label'] . '"';
+        if ($st['available']) {
+            echo '<a ' . $attrs . ' href="oauth.php?provider=' . $provider . '&intent=' . $intent . '">' .
+                '<i class="bx ' . $m['icon'] . '"></i> ' . $m['label'] . '</a>';
+        } else {
+            echo '<a ' . $attrs . ' href="oauth.php?provider=' . $provider . '&intent=' . $intent . '" ' .
+                'data-oauth-unavailable="1" data-oauth-message="' . htmlspecialchars($st['message'], ENT_QUOTES, 'UTF-8') . '">' .
+                '<i class="bx ' . $m['icon'] . '"></i> ' . $m['label'] . ' <span class="oauth-soon-badge" data-i18n="landing.comingSoon">Soon</span></a>';
+        }
+    }
+    echo '</div>';
+}
 ?>
 <!doctype html>
+
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -104,6 +192,9 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
             <?php if ($page === 'signup'): ?>
                 <h1 data-i18n="auth.joinTitle">Join the A-Code Playground Community</h1>
                 <p class="muted" data-i18n="auth.joinSubtitle">Create a free account to sync your workspace to this computer and pick up where you left off.</p>
+                <?php if (!$acpAccess['signupEnabled']): acp_auth_notice('signup'); ?>
+                <p class="muted auth-switch"><span data-i18n="auth.alreadyMember">Already a member?</span> <a class="text-link" href="?page=login" data-i18n="auth.login">Log in</a></p>
+                <?php else: ?>
                 <form id="signupForm" class="auth-form" novalidate>
                     <label for="suName" data-i18n="auth.name">Name</label>
                     <div class="field-group">
@@ -144,15 +235,15 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                     <button class="primary-btn auth-submit" type="submit"><i class="bx bx-user-plus"></i> <span data-i18n="auth.createAccount">Create account</span></button>
                 </form>
                 <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
-                <div class="oauth-buttons">
-                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=signup" aria-label="Sign up with Google"><i class="bx bxl-google"></i> Google</a>
-                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=signup" aria-label="Sign up with GitHub"><i class="bx bxl-github"></i> GitHub</a>
-                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=signup" aria-label="Sign up with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
-                </div>
+                <?php acp_oauth_buttons('signup'); ?>
                 <p class="muted auth-switch"><span data-i18n="auth.alreadyMember">Already a member?</span> <a class="text-link" href="?page=login" data-i18n="auth.login">Log in</a></p>
+                <?php endif; ?>
             <?php else: ?>
                 <h1 data-i18n="auth.welcomeBack">Welcome back</h1>
                 <p class="muted" data-i18n="auth.loginSubtitle">Log in to get back to your projects, snippets and notes.</p>
+                <?php if (!$acpAccess['signinEnabled']): acp_auth_notice('signin'); ?>
+                <p class="muted auth-switch"><span data-i18n="auth.newHere">New here?</span> <a class="text-link" href="?page=signup" data-i18n="auth.joinCommunityLower">Join the community</a></p>
+                <?php else: ?>
                 <form id="loginForm" class="auth-form" novalidate>
                     <label for="liEmail" data-i18n="auth.email">Email</label>
                     <div class="field-group">
@@ -169,12 +260,9 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                     <button class="primary-btn auth-submit" type="submit"><i class="bx bx-log-in"></i> <span data-i18n="auth.login">Log in</span></button>
                 </form>
                 <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
-                <div class="oauth-buttons">
-                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=login" aria-label="Sign in with Google"><i class="bx bxl-google"></i> Google</a>
-                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=login" aria-label="Sign in with GitHub"><i class="bx bxl-github"></i> GitHub</a>
-                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=login" aria-label="Sign in with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
-                </div>
+                <?php acp_oauth_buttons('login'); ?>
                 <p class="muted auth-switch"><span data-i18n="auth.newHere">New here?</span> <a class="text-link" href="?page=signup" data-i18n="auth.joinCommunityLower">Join the community</a></p>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </section>
@@ -188,7 +276,8 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                 <p class="muted">Placeholder terms — replace this page with your own before going live. By creating an account you agree to use A-Code Playground responsibly, keep your login credentials secure, and accept that this is a self-hosted, free, no-warranty tool.</p>
             <?php else: ?>
                 <h1>Privacy Policy</h1>
-                <p class="muted">Placeholder privacy policy — replace this page with your own before going live. A-Code Playground stores the account info you provide (name, email, and — for password accounts — a hashed password) and, if you sign in with Google, GitHub or Facebook, the name/email/ID that provider shares with us. This data is used only to run your account and is not sold or shared with third parties.</p>
+                <?php render_privacy_policy_intro(); ?>
+                <?php render_privacy_policy_sections(); ?>
             <?php endif; ?>
             <p class="muted auth-switch"><a class="text-link" href="?page=landing">&larr; Back to A-Code Playground</a></p>
         </div>
@@ -198,9 +287,9 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
 
     <section class="guest-hero split" id="guestTop">
         <div class="guest-hero-content">
-            <div class="eyebrow" data-i18n="dash.hero.eyebrow">PERSONAL DEVELOPMENT WORKSPACE</div>
-            <h1 data-i18n="dash.hero.title">Build. Test. Learn. Ship.</h1>
-            <p data-i18n="landing.heroSubtitle">A self-hosted workspace for organizing code, UI experiments, reusable snippets, projects and development notes — with a free community account to keep it all yours.</p>
+            <div class="eyebrow" data-i18n="landing.heroEyebrow">YOUR CODING PLAYGROUND</div>
+            <h1 data-i18n="landing.heroTitle">Let's Start Your Playground Journey</h1>
+            <p data-i18n="landing.heroSubtitle">A beginner-friendly workspace to build, test, and learn at your own pace — organize your code, experiment with UI, save reusable snippets, and grow every project, all yours with a free community account.</p>
             <div class="guest-hero-actions">
                 <a class="primary-btn guest-cta ripple-btn" href="#joinPanel" data-open-auth="login"><i class="bx bx-rocket"></i> <span data-i18n="landing.getStarted">Get Started</span></a>
                 <a class="ghost-btn ripple-btn" href="#joinPanel" data-open-auth="signup"><i class="bx bx-group"></i> <span data-i18n="landing.joinNow">Join community now</span></a>
@@ -219,7 +308,7 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                     <li><i class="bx bx-check"></i> <span data-i18n="landing.practiceSnippets">Practice with reusable snippets</span></li>
                     <li><i class="bx bx-check"></i> <span data-i18n="landing.trackProgress">Track your progress over time</span></li>
                 </ul>
-                <a class="primary-btn guest-cta hero-highlight-cta ripple-btn" href="#joinPanel" data-open-auth="signup"><i class="bx bx-user-plus"></i> <span data-i18n="landing.enroll">Enroll Myself</span></a>
+                <a class="primary-btn guest-cta hero-highlight-cta ripple-btn" href="#joinPanel" data-open-auth="signup"><i class="bx bx-user-plus"></i> <span data-i18n="landing.enroll">Enroll Now!</span></a>
             </div>
 
             <div class="guest-hero-form-wrap" id="joinPanel" inert>
@@ -228,6 +317,9 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                 <span class="pill-tag"><i class="bx bx-rocket"></i> <span data-i18n="landing.getStartedTag">GET STARTED</span></span>
                 <h2 data-i18n="landing.signupTitle">Sign up and join now!</h2>
                 <p class="muted" data-i18n="landing.signupSubtitle">Create a free account and your workspace syncs to this computer automatically.</p>
+                <?php if (!$acpAccess['signupEnabled']): acp_auth_notice('signup'); ?>
+                <p class="muted auth-switch"><span data-i18n="landing.alreadyHaveAccount">Already have an account?</span> <a class="text-link" href="#joinPanel" data-open-auth="login" data-i18n="landing.signInNow">sign in now!</a></p>
+                <?php else: ?>
                 <form id="signupForm" class="auth-form" novalidate>
                     <label for="suName" data-i18n="auth.name">Name</label>
                     <div class="field-group">
@@ -268,12 +360,9 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                     <button class="primary-btn auth-submit ripple-btn" type="submit"><i class="bx bx-user-plus"></i> <span data-i18n="landing.signUp">Sign Up</span></button>
                 </form>
                 <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
-                <div class="oauth-buttons">
-                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=signup" aria-label="Sign up with Google"><i class="bx bxl-google"></i> Google</a>
-                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=signup" aria-label="Sign up with GitHub"><i class="bx bxl-github"></i> GitHub</a>
-                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=signup" aria-label="Sign up with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
-                </div>
+                <?php acp_oauth_buttons('signup'); ?>
                 <p class="muted auth-switch"><span data-i18n="landing.alreadyHaveAccount">Already have an account?</span> <a class="text-link" href="#joinPanel" data-open-auth="login" data-i18n="landing.signInNow">sign in now!</a></p>
+                <?php endif; ?>
             </div>
 
             <div class="guest-hero-form panel" id="loginCard" inert>
@@ -281,6 +370,9 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                 <span class="pill-tag"><i class="bx bx-log-in"></i> <span data-i18n="landing.welcomeBackTag">WELCOME BACK</span></span>
                 <h2 data-i18n="landing.signInTitle">Sign In</h2>
                 <p class="muted" data-i18n="landing.signInSubtitle">Log in to A-Code Playground to keep working on your projects.</p>
+                <?php if (!$acpAccess['signinEnabled']): acp_auth_notice('signin'); ?>
+                <p class="muted auth-switch"><span data-i18n="landing.noAccount">Don't have an account?</span> <a class="text-link" href="#joinPanel" data-open-auth="signup" data-i18n="landing.signUpNow">sign up now!</a></p>
+                <?php else: ?>
                 <form id="loginForm" class="auth-form" novalidate>
                     <label for="liEmail" data-i18n="auth.email">Email</label>
                     <div class="field-group">
@@ -297,22 +389,41 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
                     <button class="primary-btn auth-submit ripple-btn" type="submit"><i class="bx bx-log-in"></i> <span data-i18n="landing.signIn">Sign In</span></button>
                 </form>
                 <div class="oauth-divider" data-i18n="auth.orContinueWith">or continue with</div>
-                <div class="oauth-buttons">
-                    <a class="oauth-btn oauth-google" href="oauth.php?provider=google&intent=login" aria-label="Sign in with Google"><i class="bx bxl-google"></i> Google</a>
-                    <a class="oauth-btn oauth-github" href="oauth.php?provider=github&intent=login" aria-label="Sign in with GitHub"><i class="bx bxl-github"></i> GitHub</a>
-                    <a class="oauth-btn oauth-facebook" href="oauth.php?provider=facebook&intent=login" aria-label="Sign in with Facebook"><i class="bx bxl-facebook-circle"></i> Facebook</a>
-                </div>
+                <?php acp_oauth_buttons('login'); ?>
                 <p class="muted auth-switch"><span data-i18n="landing.noAccount">Don't have an account?</span> <a class="text-link" href="#joinPanel" data-open-auth="signup" data-i18n="landing.signUpNow">sign up now!</a></p>
+                <?php endif; ?>
             </div>
             </div>
         </div>
     </section>
 
-    <section class="guest-features" id="features">
-        <div class="guest-feature panel reveal"><b><i class="bx bx-code-alt"></i></b><h3 data-i18n="quick.code">Code Playground</h3><p class="muted" data-i18n="landing.featCodeDesc">Write and preview HTML, CSS and JavaScript in a live sandbox.</p></div>
-        <div class="guest-feature panel reveal"><b><i class="bx bx-code-curly"></i></b><h3 data-i18n="quick.snippets">Snippets</h3><p class="muted" data-i18n="landing.featSnippetsDesc">Save, search and reuse the components you build most often.</p></div>
-        <div class="guest-feature panel reveal"><b><i class="bx bx-folder-open"></i></b><h3 data-i18n="nav.projects">Projects</h3><p class="muted" data-i18n="landing.featProjectsDesc">Track personal development projects and ideas in one place.</p></div>
-        <div class="guest-feature panel reveal"><b><i class="bx bx-note"></i></b><h3 data-i18n="nav.notes">Notes</h3><p class="muted" data-i18n="landing.featNotesDesc">Keep technical notes without leaving your workspace.</p></div>
+    <section class="guest-journey" id="features">
+        <div class="guest-section-head reveal">
+            <span class="section-kicker" data-i18n="landing.journeyKicker">STEP BY STEP</span>
+            <h2 data-i18n="landing.journeyTitle">Your beginner's journey</h2>
+            <p data-i18n="landing.journeySubtitle">Everything you need to go from your first line of code to a portfolio you can point to — all in one guided path.</p>
+        </div>
+        <div class="guest-features">
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 1</span><b><i class="bx bx-compass"></i></b><h3 data-i18n="landing.step1Title">Pick your pace</h3><p class="muted" data-i18n="landing.step1Desc">Choose Beginner, Intermediate or Professional and take the guided tour — the workspace adjusts how much guidance it shows.</p></div>
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 2</span><b><i class="bx bx-code-alt"></i></b><h3 data-i18n="quick.code">Code Playground</h3><p class="muted" data-i18n="landing.step2Desc">Write HTML, CSS and JavaScript in a live sandbox and watch the result update as you type.</p></div>
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 3</span><b><i class="bx bxl-php"></i></b><h3 data-i18n="quick.php">PHP Playground</h3><p class="muted" data-i18n="landing.step3Desc">Write real PHP and run it instantly — a full PHP engine runs locally in your browser, no server needed.</p></div>
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 4</span><b><i class="bx bx-data"></i></b><h3 data-i18n="nav.sql">SQL Playground</h3><p class="muted" data-i18n="landing.step4Desc">Practice real SQL queries against sample data and see the results immediately.</p></div>
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 5</span><b><i class="bx bx-terminal"></i></b><h3 data-i18n="playground.title">Combined Playground</h3><p class="muted" data-i18n="landing.step5Desc">Bring HTML, CSS, JavaScript, PHP and SQL together in one editor once you're ready to go full-stack.</p></div>
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 6</span><b><i class="bx bx-table"></i></b><h3 data-i18n="nav.php-sample">PHP Examples</h3><p class="muted" data-i18n="landing.step6Desc">Browse a library of PHP basics and CRUD samples — read the code, see the output, or open it in the Playground.</p></div>
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 7</span><b><i class="bx bx-layer"></i></b><h3 data-i18n="quick.components">UI Components</h3><p class="muted" data-i18n="landing.step7Desc">Grab ready-made HTML/CSS interface patterns you can drop straight into your own projects.</p></div>
+            <div class="guest-feature panel reveal"><span class="guest-feature-step">STEP 8</span><b><i class="bx bx-code-curly"></i></b><h3 data-i18n="landing.step8Title">Snippets, Projects &amp; Notes</h3><p class="muted" data-i18n="landing.step8Desc">Save reusable code, track real projects, and keep development notes — the start of a portfolio you can show off.</p></div>
+        </div>
+
+        <div class="guest-section-head reveal" style="margin-top:56px">
+            <span class="section-kicker" data-i18n="landing.alsoIncludedKicker">ALSO INCLUDED</span>
+            <h2 data-i18n="landing.alsoIncludedTitle">Everything else that comes with it</h2>
+        </div>
+        <div class="guest-features">
+            <div class="guest-feature panel reveal"><b><i class="bx bx-medal"></i></b><h3 data-i18n="landing.extraProgressTitle">Progress &amp; XP</h3><p class="muted" data-i18n="landing.extraProgressDesc">Earn points, ranks and streaks as you complete lessons and keep coming back.</p></div>
+            <div class="guest-feature panel reveal"><b><i class="bx bx-cloud-upload"></i></b><h3 data-i18n="landing.extraPrivateTitle">Yours, locally</h3><p class="muted" data-i18n="landing.extraPrivateDesc">Your work is saved to your own browser first, with an optional Google Drive backup.</p></div>
+            <div class="guest-feature panel reveal"><b><i class="bx bx-mobile-alt"></i></b><h3 data-i18n="landing.extraInstallTitle">Install as an app</h3><p class="muted" data-i18n="landing.extraInstallDesc">Add A-Code Playground to your home screen and keep working, even offline.</p></div>
+            <div class="guest-feature panel reveal"><b><i class="bx bx-world"></i></b><h3 data-i18n="landing.extraLangTitle">5 languages, light &amp; dark</h3><p class="muted" data-i18n="landing.extraLangDesc">Switch between English, Spanish, French, German and Filipino, and pick the theme that's easiest on your eyes.</p></div>
+        </div>
     </section>
 
     <section class="guest-cta-band panel reveal">
@@ -344,7 +455,7 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
     </div>
     <div class="guest-footer-bottom">
         <span><i class="bx bx-copyright"></i> <?php echo date('Y'); ?> A-Code Playground. <span data-i18n="landing.allRightsReserved">All rights reserved.</span></span>
-        <span class="guest-footer-tag" data-i18n="dash.hero.title">Build. Test. Learn. Ship.</span>
+        <span class="guest-footer-tag" data-i18n="landing.heroTitle">Let's Start Your Playground Journey</span>
         <a class="icon-btn guest-footer-admin-btn" id="adminControlBtn" href="admin-dashboard.php" title="Admin dashboard" aria-label="Open admin dashboard"><i class="bx bxs-shield-alt-2"></i></a>
     </div>
 </footer>
@@ -402,6 +513,8 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
     }
   });
 
+  window.acpOpenAuth = openAuth;
+
   document.querySelectorAll('[data-open-auth]').forEach(function(el){
     el.addEventListener('click', function(e){
       e.preventDefault();
@@ -414,16 +527,6 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
       closeAuth();
     });
   });
-
-  /* ---------- Surface oauth.php errors (e.g. "?oauth_error=..." after a failed
-     social sign-in redirect) in the matching panel's error box. ---------- */
-  var oauthError = new URLSearchParams(window.location.search).get('oauth_error');
-  if (oauthError) {
-    var which = new URLSearchParams(window.location.search).get('oauth_intent') === 'login' ? 'login' : 'signup';
-    openAuth(which);
-    var box = document.getElementById(which === 'login' ? 'loginError' : 'signupError');
-    if (box) { box.hidden = false; box.textContent = oauthError; }
-  }
 })();
 </script>
 
@@ -472,7 +575,7 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
      the same loading-circle feedback as the email/password submit button
      instead of leaving the click feeling unresponsive while the browser
      loads the next page. ---------- */
-  document.querySelectorAll('.oauth-btn').forEach(function(btn){
+  document.querySelectorAll('.oauth-btn:not([data-oauth-unavailable])').forEach(function(btn){
     btn.addEventListener('click', function(){
       if (btn.classList.contains('is-loading')) { return; }
       btn.classList.add('is-loading');
@@ -827,9 +930,12 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
   var modalBox = modal ? modal.querySelector('.modal') : null;
   var modalCloseBtn = document.getElementById('modalClose');
 
-  function openModal(html) {
+  function openModal(html, extraClass) {
     if (!modal || !modalBody) return;
     modalBody.innerHTML = html;
+    if (modalBox) {
+      modalBox.className = 'modal' + (extraClass ? ' ' + extraClass : '');
+    }
     modal.classList.add('show');
     modal.setAttribute('aria-hidden', 'false');
     document.body.classList.add('modal-open');
@@ -849,69 +955,131 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
     if (e.key === 'Escape' && modal && modal.classList.contains('show')) { closeModal(); }
   });
 
+  /* ---------- A small "can't do that right now" modal, shared by:
+     1. Buttons we already know are unavailable (data-oauth-unavailable) —
+        shown instantly, no navigation at all.
+     2. A genuine oauth.php redirect failure (e.g. the callback itself
+        failed) — the one case that still needs the real round trip. ---------- */
+  function showOauthUnavailableModal(intent, message) {
+    var title = intent === 'login'
+      ? t('auth.oauthErrorTitleLogin', "Couldn't sign you in")
+      : t('auth.oauthErrorTitleSignup', "Couldn't create your account");
+    var retryLabel = t('auth.tryAnotherWay', 'Use email instead');
+    openModal(
+      '<div class="oauth-error-modal">' +
+        '<div class="oauth-error-icon"><i class="bx bx-time-five"></i></div>' +
+        '<h2>' + title + '</h2>' +
+        '<p class="muted">' + message + '</p>' +
+        '<button type="button" class="primary-btn ripple-btn" id="oauthErrorDismiss">' + retryLabel + '</button>' +
+      '</div>',
+      'modal-narrow'
+    );
+    var dismissBtn = document.getElementById('oauthErrorDismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', function(){
+        closeModal();
+        var field = document.querySelector((intent === 'login' ? '#loginCard' : '#signupCard') + ' input');
+        if (field) { field.focus(); }
+      });
+    }
+  }
+
+  /* ---------- Buttons already known to be unavailable (provider switched
+     off, or never configured) — caught before any navigation happens, so
+     clicking one never reloads the page. ---------- */
+  document.querySelectorAll('.oauth-btn[data-oauth-unavailable]').forEach(function(btn){
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      var url = new URL(btn.href);
+      var intent = url.searchParams.get('intent') === 'login' ? 'login' : 'signup';
+      showOauthUnavailableModal(intent, btn.getAttribute('data-oauth-message'));
+    });
+  });
+
+  /* ---------- Surface oauth.php errors (e.g. "?oauth_error=..." after a failed
+     social sign-in redirect) as an interactive modal, with the matching
+     Sign In / Join Community card open underneath it. This only fires for
+     failures that could only be known after the real redirect (an unknown
+     provider response, a callback error) — everything predictable is now
+     caught above without ever leaving the page. ---------- */
+  var oauthError = new URLSearchParams(window.location.search).get('oauth_error');
+  if (oauthError) {
+    var oaWhich = new URLSearchParams(window.location.search).get('oauth_intent') === 'login' ? 'login' : 'signup';
+    if (window.acpOpenAuth) { window.acpOpenAuth(oaWhich); }
+    showOauthUnavailableModal(oaWhich, oauthError);
+    // Drop the query params so a refresh doesn't reopen the modal.
+    if (window.history && window.history.replaceState) {
+      var url = new URL(window.location.href);
+      url.searchParams.delete('oauth_error');
+      url.searchParams.delete('oauth_intent');
+      window.history.replaceState({}, '', url);
+    }
+  }
+
   /* ---------- Terms of Service / Privacy Policy read-gate ----------
      The sign-up "I agree" checkbox stays disabled until the person has
-     opened *and scrolled to the end of* both documents in the modal
-     below — so agreement can't be given to text that was never read. ---------- */
+     opened *and scrolled to the end* of this modal — so agreement can't
+     be given to text that was never read. Terms and Privacy used to be
+     two separate documents/modals that each needed their own scroll-to-
+     the-end pass; they're combined into one scrollable modal now, so
+     reading either link reads both at once. ---------- */
   var legalContent = {
-    terms: {
-      title: 'Terms of Service',
-      html:
-        '<p class="muted">Placeholder terms — replace this page with your own before going live.</p>' +
-        '<ol style="margin:0;padding-left:20px;line-height:1.7;color:var(--text)">' +
-        '<li>By creating an account you agree to use A-Code Playground responsibly and not to abuse, disrupt or attempt unauthorized access to the service.</li>' +
-        '<li>You are responsible for keeping your login credentials — password or connected OAuth account — secure.</li>' +
-        '<li>Projects, snippets and notes you create remain yours; you are responsible for the content you store here.</li>' +
-        '<li>This is a self-hosted, free, no-warranty tool provided "as is", without guarantees of uptime, backups or fitness for a particular purpose.</li>' +
-        '<li>Accounts found to be abusing the service (spam, attempted exploits, automated scraping) may be suspended.</li>' +
-        '<li>These terms may change as the project evolves; continued use after a change means you accept the updated terms.</li>' +
-        '<li>The service is not intended for storing sensitive personal, financial or health data.</li>' +
-        '<li>Questions about these terms can be directed to the workspace administrator.</li>' +
-        '</ol>',
-    },
-    privacy: {
-      title: 'Privacy Policy',
-      html:
-        '<p class="muted">Placeholder privacy policy — replace this page with your own before going live.</p>' +
-        '<ol style="margin:0;padding-left:20px;line-height:1.7;color:var(--text)">' +
-        '<li>A-Code Playground stores the account info you provide: name, email, and — for password accounts — a hashed password (never the plain password).</li>' +
-        '<li>If you sign in with Google, GitHub or Facebook, we store the name, email and account ID that provider shares with us.</li>' +
-        '<li>Projects, snippets and notes are stored to run your workspace and are not scanned for advertising purposes.</li>' +
-        '<li>This data is used only to operate your account and is not sold or shared with third parties.</li>' +
-        '<li>Standard technical logs (e.g. sign-in timestamps) may be kept briefly for security and troubleshooting.</li>' +
-        '<li>You can request export or deletion of your account data at any time from Settings.</li>' +
-        '</ol>',
-    }
+    title: 'Terms of Service &amp; Privacy Policy',
+    html:
+      '<h3 class="legal-modal-heading"><i class="bx bx-file"></i> Terms of Service</h3>' +
+      '<p class="legal-intro">The short version: use the workspace responsibly, keep your own content, and remember this is a free, self-hosted tool provided as-is.</p>' +
+      '<ol class="legal-list">' +
+      '<li><b>Use it responsibly.</b> By creating an account you agree to use A-Code Playground responsibly and not to abuse, disrupt or attempt unauthorized access to the service.</li>' +
+      '<li><b>Keep your credentials secure.</b> You are responsible for keeping your login — password or connected OAuth account — secure.</li>' +
+      '<li><b>Your content stays yours.</b> Projects, snippets and notes you create remain yours; you are responsible for what you store here.</li>' +
+      '<li><b>Provided &ldquo;as is&rdquo;.</b> This is a self-hosted, free, no-warranty tool, without guarantees of uptime, backups or fitness for a particular purpose.</li>' +
+      '<li><b>Abuse gets suspended.</b> Accounts found spamming, attempting exploits or running automated scraping may be suspended.</li>' +
+      '<li><b>Terms can change.</b> These terms may change as the project evolves; continued use after a change means you accept the update.</li>' +
+      '<li><b>Not for sensitive data.</b> The service is not intended for storing sensitive personal, financial or health data.</li>' +
+      '<li><b>Questions?</b> Direct them to the workspace administrator.</li>' +
+      '</ol>' +
+      '<h3 class="legal-modal-heading"><i class="bx bx-lock-alt"></i> Privacy Policy</h3>' +
+      '<p class="legal-intro">A-Code Playground is a self-hosted, single-admin workspace — no ad network, analytics tracker or data broker is involved.</p>' +
+      '<ol class="legal-list">' +
+      '<li><b>Account data.</b> Password accounts: name, email and a bcrypt <i>hash</i> of your password — never the plain password. OAuth accounts (Google/GitHub/Facebook): only the name, email and ID that provider shares with us.</li>' +
+      '<li><b>Your workspace content.</b> Projects, Notes, Snippets and saved Components live in a database table scoped to your account — never scanned for advertising.</li>' +
+      '<li><b>Local-first storage.</b> Every change saves to your browser first, then mirrors to the database as backup; deleting something moves it to your local Recycle Bin first.</li>' +
+      '<li><b>Gamification data.</b> A points/streak ledger tracks which actions earned XP, used only to power the leaderboard.</li>' +
+      '<li><b>Cookies.</b> One HttpOnly, SameSite=Lax session cookie keeps you signed in — Secure over HTTPS, no tracking or ad cookies, ever.</li>' +
+      '<li><b>Optional Drive backup.</b> If you connect Google Drive, we store your Drive email, an encrypted refresh token and your last sync time — nothing else from your Drive.</li>' +
+      '<li><b>Security logs.</b> Admin actions are written to a technical audit log (timestamp, IP, actor email), capped at ~1,000 entries — passwords are never logged.</li>' +
+      '<li><b>Never sold.</b> This data is never sold, rented or shared with third parties.</li>' +
+      '<li><b>Your controls.</b> Export a full JSON snapshot of your workspace, or request account deletion, at any time from Settings.</li>' +
+      '</ol>',
   };
-  var legalRead = { terms: false, privacy: false };
+  var legalRead = false;
   var consent = document.getElementById('suConsent');
   var consentRow = document.getElementById('suConsentRow');
   var consentHint = document.getElementById('suConsentHint');
 
   function updateConsentAvailability() {
     if (!consent) return;
-    var allRead = legalRead.terms && legalRead.privacy;
+    var allRead = legalRead;
     consent.disabled = !allRead;
     if (!allRead && consent.checked) { consent.checked = false; }
     if (consentRow) { consentRow.classList.toggle('is-locked', !allRead); }
     if (consentHint) { consentHint.classList.toggle('is-unlocked', allRead); }
   }
 
-  function openLegalModal(which) {
-    var doc = legalContent[which];
-    if (!doc || !modal) { window.location.href = '?page=' + which; return; }
+  function openLegalModal() {
+    var doc = legalContent;
+    if (!doc || !modal) { window.location.href = '?page=terms'; return; }
     var scrollNote = t('auth.legalScrollNote', 'Scroll down to finish reading.');
     openModal(
       '<h2>' + doc.title + '</h2>' +
       '<div id="legalModalBody">' + doc.html + '</div>' +
-      '<p class="legal-modal-note" id="legalModalNote"><i class="bx bx-down-arrow-circle"></i><span>' + scrollNote + '</span></p>'
+      '<p class="legal-modal-note" id="legalModalNote"><i class="bx bx-down-arrow-circle"></i><span>' + scrollNote + '</span></p>',
+      'modal-legal'
     );
     var note = document.getElementById('legalModalNote');
-    var markedRead = false;
     function markRead() {
-      if (markedRead) return;
-      markedRead = true;
-      legalRead[which] = true;
+      if (legalRead) return;
+      legalRead = true;
       if (note) {
         note.classList.add('is-done');
         note.innerHTML = '<i class="bx bx-check-circle"></i><span>' + t('auth.legalReadDone', "You've reached the end — thanks for reading.") + '</span>';
@@ -930,10 +1098,12 @@ if (!defined('ACODEPLAYGROUND_USERS_FILE')) { require_once __DIR__ . '/core/auth
     }
   }
 
+  // Terms and Privacy are now one combined, scrollable document, so both
+  // links open the same modal at the top - reading either one reads both.
   document.querySelectorAll('[data-legal-link]').forEach(function(a){
     a.addEventListener('click', function(e){
       e.preventDefault();
-      openLegalModal(a.getAttribute('data-legal-link'));
+      openLegalModal();
     });
   });
 

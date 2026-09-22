@@ -92,7 +92,47 @@
 '      email.classList.toggle(\'bad\', !okEmail); pw.classList.toggle(\'bad\', !okPw);\n' +
 '      document.getElementById(\'e1\').textContent = okEmail ? \'\' : \'Enter a valid email.\';\n' +
 '      document.getElementById(\'e2\').textContent = okPw ? \'\' : \'Use at least 8 characters.\';\n' +
-'      document.getElementById(\'ok\').textContent = okEmail && okPw ? \'Account created!\' : \'\';\n    });\n  </script>\n</body>\n</html>\n' }
+'      document.getElementById(\'ok\').textContent = okEmail && okPw ? \'Account created!\' : \'\';\n    });\n  </script>\n</body>\n</html>\n' },
+    { name: 'Combine: notes + theme', code:
+'<!doctype html>\n<html>\n<head>\n  <meta charset="utf-8">\n  <style>\n' +
+'    :root { --bg: #f5f6f8; --card: #fff; --border: #e3e6ea; --text: #15171a; --muted: #68707a; --accent: #15171a; }\n' +
+'    [data-theme="dark"] { --bg: #14161a; --card: #1c1f24; --border: #2a2e35; --text: #f1f2f4; --muted: #9aa2ab; --accent: #f1f2f4; }\n' +
+'    * { box-sizing: border-box; }\n' +
+'    body { margin: 0; min-height: 100vh; font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); transition: background .2s, color .2s; }\n' +
+'    .wrap { max-width: 480px; margin: 40px auto; padding: 0 16px; }\n' +
+'    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }\n' +
+'    h1 { font-size: 22px; margin: 0; }\n' +
+'    #themeBtn { border: 1px solid var(--border); background: var(--card); color: var(--text); border-radius: 10px; padding: 8px 12px; cursor: pointer; }\n' +
+'    .tabs { display: flex; gap: 6px; margin-bottom: 16px; }\n' +
+'    .tab { flex: 1; border: 1px solid var(--border); background: var(--card); color: var(--muted); border-radius: 10px; padding: 8px; cursor: pointer; font-weight: 700; }\n' +
+'    .tab.active { color: var(--text); border-color: var(--text); }\n' +
+'    .panel { display: none; }\n    .panel.active { display: block; }\n' +
+'    form { display: flex; gap: 8px; margin-bottom: 12px; }\n' +
+'    input { flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); }\n' +
+'    button.add { border: 0; background: var(--accent); color: var(--bg); border-radius: 10px; padding: 10px 14px; font-weight: 700; cursor: pointer; }\n' +
+'    ul { list-style: none; padding: 0; margin: 0; }\n' +
+'    li { display: flex; justify-content: space-between; padding: 10px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--card); }\n' +
+'    li button { border: 0; background: none; color: #c0392b; cursor: pointer; }\n' +
+'    .empty { color: var(--muted); text-align: center; padding: 20px 0; }\n    .count { color: var(--muted); font-size: 13px; }\n' +
+'  </style>\n</head>\n<body>\n  <div class="wrap">\n    <header>\n      <h1>Combine demo</h1>\n      <button id="themeBtn">Dark mode</button>\n    </header>\n' +
+'    <div class="tabs">\n      <button class="tab active" data-tab="notes">Notes</button>\n      <button class="tab" data-tab="about">About</button>\n    </div>\n' +
+'    <section class="panel active" data-panel="notes">\n      <form id="form">\n        <input id="input" placeholder="Add a note" autocomplete="off">\n' +
+'        <button class="add">Add</button>\n      </form>\n      <p class="count" id="count">0 notes</p>\n      <ul id="list"></ul>\n    </section>\n' +
+'    <section class="panel" data-panel="about">\n      <p>This one file mixes HTML for structure, CSS custom properties for theming, and JavaScript for the tabs, the dark mode toggle and the notes list. Edit any part and press Run.</p>\n    </section>\n' +
+'  </div>\n  <script>\n    document.querySelectorAll(\'.tab\').forEach(function (t) {\n      t.addEventListener(\'click\', function () {\n' +
+'        document.querySelectorAll(\'.tab\').forEach(function (x) { x.classList.toggle(\'active\', x === t); });\n        var name = t.dataset.tab;\n' +
+'        document.querySelectorAll(\'.panel\').forEach(function (p) { p.classList.toggle(\'active\', p.dataset.panel === name); });\n      });\n    });\n' +
+'    var themeBtn = document.getElementById(\'themeBtn\');\n    themeBtn.addEventListener(\'click\', function () {\n' +
+'      var dark = document.documentElement.getAttribute(\'data-theme\') === \'dark\';\n      document.documentElement.setAttribute(\'data-theme\', dark ? \'\' : \'dark\');\n' +
+'      themeBtn.textContent = dark ? \'Dark mode\' : \'Light mode\';\n    });\n' +
+'    var notes = [];\n    var list = document.getElementById(\'list\');\n    var count = document.getElementById(\'count\');\n' +
+'    function render() {\n      list.innerHTML = \'\';\n      count.textContent = notes.length + (notes.length === 1 ? \' note\' : \' notes\');\n' +
+'      if (!notes.length) {\n        var empty = document.createElement(\'div\');\n        empty.className = \'empty\'; empty.textContent = \'No notes yet.\';\n' +
+'        list.appendChild(empty);\n        return;\n      }\n      notes.forEach(function (text, i) {\n        var li = document.createElement(\'li\');\n' +
+'        var span = document.createElement(\'span\'); span.textContent = text;\n        var del = document.createElement(\'button\'); del.textContent = \'Remove\';\n' +
+'        del.addEventListener(\'click\', function () { notes.splice(i, 1); render(); });\n        li.appendChild(span); li.appendChild(del);\n        list.appendChild(li);\n      });\n    }\n' +
+'    document.getElementById(\'form\').addEventListener(\'submit\', function (e) {\n      e.preventDefault();\n      var input = document.getElementById(\'input\');\n' +
+'      if (!input.value.trim()) return;\n      notes.push(input.value.trim());\n      input.value = \'\';\n      render();\n    });\n    render();\n  </script>\n</body>\n</html>\n' }
   ];
 
   /* ---------------- state ---------------- */

@@ -20,6 +20,22 @@ if (!defined('ACODEPLAYGROUND_SECURITY_LOADED')) {
 define('ACODEPLAYGROUND_SECURITY_LOADED', true);
 
 /**
+ * Auto sign-out after inactivity, in seconds (30 minutes). Read by
+ * index.php and handed to the browser as window.IDLE_TIMEOUT_MS for the
+ * idle-timeout watcher in assets/js/app.js. This constant was referenced
+ * by index.php but never actually defined anywhere, which caused a PHP
+ * fatal error ("Undefined constant ACODEPLAYGROUND_IDLE_TIMEOUT") partway
+ * through the page's inline <script> block on every logged-in page load.
+ * That fatal error halted PHP output immediately, so assets/js/app.js
+ * (and every script after it) never got as far as being requested by the
+ * browser — the page still looked complete because all the HTML above
+ * that point had already been sent, but nothing on the page was
+ * interactive: the Playgrounds dropdown, theme toggle, and every other
+ * JS-driven control silently did nothing.
+ */
+if (!defined('ACODEPLAYGROUND_IDLE_TIMEOUT')) { define('ACODEPLAYGROUND_IDLE_TIMEOUT', 1800); }
+
+/**
  * Starts the session with hardened cookie flags. Safe to call more than
  * once — a no-op if a session is already active. Must be called before
  * any output is sent.

@@ -109,6 +109,7 @@ var VIEWS = {
   projects: { title: 'Projects', icon: 'bx-folder' },
   notes: { title: 'Notes', icon: 'bx-note' },
   snippets: { title: 'Snippets', icon: 'bx-code-block' },
+  components: { title: 'Components', icon: 'bx-layer' },
   security: { title: 'Security', icon: 'bx-shield-quarter' },
   integrations: { title: 'Google', icon: 'bxl-google' },
   github: { title: 'GitHub', icon: 'bxl-github' },
@@ -125,10 +126,11 @@ var S = {
     users: tableState('joined', 'desc'),
     projects: tableState('updated', 'desc'),
     notes: tableState('updated', 'desc'),
-    snippets: tableState('updated', 'desc')
+    snippets: tableState('updated', 'desc'),
+    components: tableState('updated', 'desc')
   },
-  sel: { users: {}, projects: {}, notes: {}, snippets: {} },
-  audit: { kind: 'all', q: '' },
+  sel: { users: {}, projects: {}, notes: {}, snippets: {}, components: {} },
+  audit: { kind: 'all', q: '', page: 1, size: 10 },
   googleTest: null,
   oauthTest: {},
   drawer: null,
@@ -136,6 +138,17 @@ var S = {
   secondsLeft: BOOT.secondsLeft, lastPing: Date.now(), warned: false,
   usersById: {}, userCounts: {}
 };
+
+/* The `snippets` table holds two different things people save from the
+   app's own sidebar: plain code Snippets and Saved Components (from the UI
+   Components library). There has never been a database column recording
+   which is which — the app itself only tells them apart by the same
+   'component-' id prefix every component save has always used (see
+   snippetSource() in assets/js/app.js) — so the admin dashboard uses that
+   same id prefix to split one server list into two pages below. Editing,
+   deleting and CSV export still talk to the `snippets` table server-side
+   (serverType), since that's the only table there is. */
+function isComponentRow(r) { return String(r.id).indexOf('component-') === 0; }
 
 var CONTENT = {
   projects: {
@@ -153,33 +166,49 @@ var CONTENT = {
     size: function (r) { return (r.body || '').length; }
   },
   snippets: {
-    singular: 'snippet', label: 'Snippets', icon: 'bx-code-block', tc: 't-snippet', titleKey: 'title',
+    singular: 'snippet', serverType: 'snippet', label: 'Snippets', icon: 'bx-code-block', tc: 't-snippet', titleKey: 'title',
     filterKey: 'lang', filterLabel: 'All languages',
     search: ['title', 'lang', 'code', 'owner_name', 'owner_email'],
     excerpt: function (r) { return trunc(r.code, 70) || 'Empty snippet'; },
     size: function (r) { return (r.code || '').length; }
+  },
+  components: {
+    singular: 'component', serverType: 'snippet', label: 'Components', icon: 'bx-layer', tc: 't-component', titleKey: 'title',
+    filterKey: 'lang', filterLabel: 'All languages',
+    search: ['title', 'lang', 'code', 'owner_name', 'owner_email'],
+    excerpt: function (r) { return trunc(r.code, 70) || 'Empty component'; },
+    size: function (r) { return (r.code || '').length; }
   }
 };
-var SINGULAR = { projects: 'project', notes: 'note', snippets: 'snippet' };
-var PLURAL = { project: 'projects', note: 'notes', snippet: 'snippets' };
+var SINGULAR = { projects: 'project', notes: 'note', snippets: 'snippet', components: 'component' };
+var PLURAL = { project: 'projects', note: 'notes', snippet: 'snippets', component: 'components' };
 
 function ckey(item) { return item.user_id + '|' + item.id; }
-function listOf(kind) { return kind === 'users' ? (S.data ? S.data.users : []) : (S.data ? S.data.content[kind] : []); }
+function listOf(kind) {
+  if (kind === 'users') return S.data ? S.data.users : [];
+  if (!S.data) return [];
+  if (kind === 'snippets') return S.data.content.snippets.filter(function (r) { return !isComponentRow(r); });
+  if (kind === 'components') return S.data.content.snippets.filter(isComponentRow);
+  return S.data.content[kind];
+}
 function itemKey(kind, item) { return kind === 'users' ? item.id : ckey(item); }
 
 function indexData(d) {
   S.usersById = {}; S.userCounts = {};
   d.users.forEach(function (u) {
     u.points_total = num(u.points_total); u.points_streak = num(u.points_streak);
-    S.usersById[u.id] = u; S.userCounts[u.id] = { projects: 0, notes: 0, snippets: 0 };
+    S.usersById[u.id] = u; S.userCounts[u.id] = { projects: 0, notes: 0, snippets: 0, components: 0 };
   });
-  ['projects', 'notes', 'snippets'].forEach(function (k) {
+  ['projects', 'notes'].forEach(function (k) {
     d.content[k].forEach(function (r) { if (S.userCounts[r.user_id]) S.userCounts[r.user_id][k]++; });
+  });
+  d.content.snippets.forEach(function (r) {
+    if (S.userCounts[r.user_id]) S.userCounts[r.user_id][isComponentRow(r) ? 'components' : 'snippets']++;
   });
   var sv = parseDT(d.system && d.system.serverTime);
   if (sv && d.generatedAt) serverOffset = sv.getTime() - d.generatedAt * 1000;
   // Drop selections that no longer exist.
-  ['users', 'projects', 'notes', 'snippets'].forEach(function (k) {
+  ['users', 'projects', 'notes', 'snippets', 'components'].forEach(function (k) {
     var alive = {}; listOf(k).forEach(function (r) { alive[itemKey(k, r)] = 1; });
     Object.keys(S.sel[k]).forEach(function (key) { if (!alive[key]) delete S.sel[k][key]; });
   });
@@ -452,9 +481,9 @@ function deltaChip(cur, prev) {
 function activityFeed(limit) {
   var ev = [];
   S.data.users.forEach(function (u) { ev.push({ t: u.joined_at, type: 'user', icon: 'bx-user-plus', head: '<b>' + esc(u.name) + '</b> joined', sub: u.email, act: 'data-act="open-user" data-id="' + esc(u.id) + '"' }); });
-  ['projects', 'notes', 'snippets'].forEach(function (k) {
+  ['projects', 'notes', 'snippets', 'components'].forEach(function (k) {
     var c = CONTENT[k];
-    S.data.content[k].forEach(function (r) {
+    listOf(k).forEach(function (r) {
       ev.push({ t: r.created_at, type: c.singular, icon: c.icon, head: '<b>' + esc(r.owner_name) + '</b> created a ' + c.singular, sub: r[c.titleKey],
         act: 'data-act="open-content" data-kind="' + k + '" data-id="' + esc(r.id) + '" data-uid="' + esc(r.user_id) + '"' });
     });
@@ -473,7 +502,8 @@ function renderOverview() {
   var kpis =
     kpi({ label: 'Users', value: fmt(c.users), icon: 'bx-group', cls: 't-user', color: 'var(--c1)', data: s.users, delta: deltaChip(newUsers7, sumPrev(s.users, 7)), sub: 'new this week', link: 'users' }) +
     kpi({ label: 'Projects', value: fmt(c.projects), icon: 'bx-folder', cls: 't-project', color: 'var(--c2)', data: s.projects, delta: deltaChip(sumLast(s.projects, 7), sumPrev(s.projects, 7)), sub: 'new this week', link: 'projects' }) +
-    kpi({ label: 'Snippets', value: fmt(c.snippets), icon: 'bx-code-block', cls: 't-snippet', color: 'var(--c4)', data: s.snippets, delta: deltaChip(sumLast(s.snippets, 7), sumPrev(s.snippets, 7)), sub: 'new this week', link: 'snippets' }) +
+    kpi({ label: 'Snippets', value: fmt(listOf('snippets').length), icon: 'bx-code-block', cls: 't-snippet', color: 'var(--c4)', data: s.snippets, delta: deltaChip(sumLast(s.snippets, 7), sumPrev(s.snippets, 7)), sub: 'new this week', link: 'snippets' }) +
+    kpi({ label: 'Components', value: fmt(listOf('components').length), icon: 'bx-layer', cls: 't-component', color: 'var(--c6, #9b59b6)', sub: 'saved from UI Components', link: 'components' }) +
     kpi({ label: 'Notes', value: fmt(c.notes), icon: 'bx-note', cls: 't-note', color: 'var(--c3)', data: s.notes, delta: deltaChip(sumLast(s.notes, 7), sumPrev(s.notes, 7)), sub: 'new this week', link: 'notes' }) +
     kpi({ label: 'Total XP earned', value: fmt(d.xp.total), icon: 'bxs-flame', cls: 't-note', color: 'var(--c5)', sub: 'longest streak ' + fmt(d.xp.maxStreak) + ' day' + (d.xp.maxStreak === 1 ? '' : 's') });
 
@@ -584,7 +614,7 @@ function filteredUsers() {
   return sortRows(rows, st, {
     name: function (u) { return lower(u.name); }, role: function (u) { return u.role; },
     level: function (u) { return LEVEL_ORDER[u.expertise_level] || 0; }, xp: function (u) { return u.points_total; },
-    content: function (u) { var c = S.userCounts[u.id]; return c.projects + c.notes + c.snippets; }, joined: function (u) { return u.joined_at || ''; }
+    content: function (u) { var c = S.userCounts[u.id]; return c.projects + c.notes + c.snippets + c.components; }, joined: function (u) { return u.joined_at || ''; }
   });
 }
 
@@ -598,7 +628,7 @@ function usersTable() {
       '<td class="col-check" data-act="noop"><input type="checkbox" class="ad-chk" data-act="sel" data-kind="users" data-key="' + esc(k) + '" aria-label="Select ' + esc(u.name) + '"' + (S.sel.users[k] ? ' checked' : '') + '></td>' +
       '<td>' + userLine(u) + '</td><td>' + roleBadge(u.role) + '</td><td>' + levelBadge(u.expertise_level) + '</td>' +
       '<td><div class="ad-xp"><b>' + fmt(u.points_total) + '</b><small>' + (u.points_streak ? ico('bxs-flame') + ' ' + u.points_streak : '') + '</small></div></td>' +
-      '<td><div class="ad-mini-counts"><span title="Projects">' + ico('bx-folder') + cnt.projects + '</span><span title="Notes">' + ico('bx-note') + cnt.notes + '</span><span title="Snippets">' + ico('bx-code-block') + cnt.snippets + '</span></div></td>' +
+      '<td><div class="ad-mini-counts"><span title="Projects">' + ico('bx-folder') + cnt.projects + '</span><span title="Notes">' + ico('bx-note') + cnt.notes + '</span><span title="Snippets">' + ico('bx-code-block') + cnt.snippets + '</span><span title="Components">' + ico('bx-layer') + cnt.components + '</span></div></td>' +
       '<td class="ad-nowrap" title="' + esc(fmtDateTime(u.joined_at)) + '">' + fmtDate(u.joined_at) + '<br><small class="ad-muted">' + esc(ago(u.joined_at)) + '</small></td>' +
       '<td class="col-act" data-act="noop"><button type="button" class="ad-icon-btn sm" data-act="open-user" data-id="' + esc(u.id) + '" title="Manage" aria-label="Manage ' + esc(u.name) + '">' + ico('bx-edit-alt') + '</button>' +
       '<button type="button" class="ad-icon-btn sm danger" data-act="delete-user" data-id="' + esc(u.id) + '" title="Delete account" aria-label="Delete ' + esc(u.name) + '"' + (isMe(u.id) ? ' disabled' : '') + '>' + ico('bx-trash') + '</button></td></tr>';
@@ -659,7 +689,7 @@ function contentTable(kind) {
       '<td class="col-act" data-act="noop"><button type="button" class="ad-icon-btn sm" ' + open + ' title="View / edit" aria-label="View or edit">' + ico('bx-show') + '</button>' +
       '<button type="button" class="ad-icon-btn sm danger" data-act="delete-content" data-kind="' + kind + '" data-id="' + esc(r.id) + '" data-uid="' + esc(r.user_id) + '" title="Delete" aria-label="Delete">' + ico('bx-trash') + '</button></td></tr>';
   }).join('');
-  var head = selHeader(kind, page) + th(kind, 'title', c.singular === 'project' ? 'Project' : c.singular === 'note' ? 'Note' : 'Snippet') +
+  var head = selHeader(kind, page) + th(kind, 'title', c.singular === 'project' ? 'Project' : c.singular === 'note' ? 'Note' : c.singular === 'component' ? 'Component' : 'Snippet') +
     (c.filterKey ? th(kind, 'filter', c.filterKey === 'lang' ? 'Language' : 'Technology') : '') + th(kind, 'owner', 'Owner') + th(kind, 'size', 'Size') + th(kind, 'updated', 'Updated') + '<th class="col-act"></th>';
   return '<div class="ad-table-wrap"><table class="ad-table"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' + pager(kind, total);
 }
@@ -697,16 +727,28 @@ function filteredAudit() {
     return !q || lower(e.event + ' ' + e.detail + ' ' + e.actor + ' ' + e.ip).indexOf(q) > -1;
   });
 }
+function auditPager(total) {
+  var pages = Math.max(1, Math.ceil(total / S.audit.size));
+  S.audit.page = clamp(S.audit.page, 1, pages);
+  var a = total ? (S.audit.page - 1) * S.audit.size + 1 : 0, b = Math.min(total, S.audit.page * S.audit.size);
+  return '<div class="ad-pager"><span>Showing <b>' + a + '–' + b + '</b> of <b>' + fmt(total) + '</b></span><div class="pg">' +
+    '<button type="button" class="ad-icon-btn sm" data-act="audit-page" data-d="-1" ' + (S.audit.page <= 1 ? 'disabled' : '') + ' aria-label="Previous page">' + ico('bx-chevron-left') + '</button>' +
+    '<span>Page ' + S.audit.page + ' / ' + pages + '</span>' +
+    '<button type="button" class="ad-icon-btn sm" data-act="audit-page" data-d="1" ' + (S.audit.page >= pages ? 'disabled' : '') + ' aria-label="Next page">' + ico('bx-chevron-right') + '</button></div></div>';
+}
 function auditList() {
-  var rows = filteredAudit();
-  if (!rows.length) return emptyState('bx-history', 'No matching events', (S.data.audit || []).length ? 'Try another filter.' : 'Admin activity will be recorded here.');
-  return rows.slice(0, 100).map(function (e) {
+  var rows = filteredAudit(), total = rows.length;
+  if (!total) return emptyState('bx-history', 'No matching events', (S.data.audit || []).length ? 'Try another filter.' : 'Admin activity will be recorded here.');
+  var pages = Math.max(1, Math.ceil(total / S.audit.size));
+  S.audit.page = clamp(S.audit.page, 1, pages);
+  var page = rows.slice((S.audit.page - 1) * S.audit.size, S.audit.page * S.audit.size);
+  return page.map(function (e) {
     var k = auditKind(e), ic = AUDIT_ICON[k], when = new Date(e.t * 1000);
     var icon = e.event === 'sign-out' ? 'bx-log-out' : ic[0];
     return '<div class="ad-log"><span class="ad-type-ico ' + ic[1] + '">' + ico(icon) + '</span><div class="ad-log-main"><b>' + esc(cap(e.event)) + '</b>' + (e.ok ? '' : ' <span class="ad-badge bad">failed</span>') +
       '<small>' + esc(e.detail) + '</small><small>' + esc(e.actor || 'unknown') + (e.ip ? ' · ' + esc(e.ip) : '') + '</small></div>' +
       '<div class="ad-log-time" title="' + esc(when.toLocaleString()) + '">' + esc(agoMs(when.getTime())) + '</div></div>';
-  }).join('') + (rows.length > 100 ? '<div class="ad-row ad-muted" style="justify-content:center">Showing the newest 100 of ' + fmt(rows.length) + ' events — export CSV for everything.</div>' : '');
+  }).join('') + auditPager(total);
 }
 
 function renderSecurity() {
@@ -716,6 +758,17 @@ function renderSecurity() {
   var ringColor = score >= 85 ? 'var(--success)' : score >= 60 ? 'var(--warn)' : 'var(--danger)';
   var failed24 = (d.audit || []).filter(function (e) { return e.event === 'sign-in failed' && (Date.now() / 1000 - e.t) < 86400; }).length;
   var admins = d.users.filter(function (u) { return u.role === 'admin'; });
+  var acc = d.access || { signinEnabled: true, signupEnabled: true };
+
+  var accessForm =
+    '<form data-form="access-settings" autocomplete="off">' +
+      '<label class="ad-switch-row"><div><b>Allow signing in</b><small>When off, the Log in form and every “Sign in with…” button show a “currently under review” notice instead. Existing sessions are not affected.</small></div>' +
+        '<span class="ad-switch"><input type="checkbox" name="signinEnabled"' + (acc.signinEnabled ? ' checked' : '') + '><i></i></span></label>' +
+      '<label class="ad-switch-row"><div><b>Allow signing up</b><small>When off, the Join Community form and every “Sign up with…” button show a “currently under review” notice instead. Existing accounts can still be created by an admin.</small></div>' +
+        '<span class="ad-switch"><input type="checkbox" name="signupEnabled"' + (acc.signupEnabled ? ' checked' : '') + '><i></i></span></label>' +
+      '<div class="ad-actions" style="margin-top:4px"><button type="submit" class="ad-btn ad-btn-primary">Save</button></div>' +
+      (acc.updatedAt ? '<p class="ad-muted" style="font-size:12px;margin-top:12px">Last saved ' + esc(fmtDateTime(acc.updatedAt)) + (acc.updatedBy ? ' by ' + esc(acc.updatedBy) : '') + '</p>' : '') +
+    '</form>';
 
   var lock = d.lockouts.length ? d.lockouts.map(function (l) {
     var until = Date.now() + l.secondsLeft * 1000, isAdmin = /^admin:/.test(l.key);
@@ -738,6 +791,7 @@ function renderSecurity() {
       kpi({ label: 'Admin accounts', value: fmt(admins.length), icon: 'bx-shield-alt-2', cls: 't-user', sub: admins.slice(0, 2).map(function (a) { return esc(a.name); }).join(', ') || '—' }) +
       kpi({ label: 'Idle timeout', value: Math.round(d.session.timeout / 60) + ' min', icon: 'bx-timer', cls: 't-project', sub: 'auto-lock when inactive' }) +
     '</div>' +
+    '<div class="ad-card" style="margin-bottom:16px">' + cardHead('Sign in / Sign up availability', 'Switch either flow off sitewide — for example while it\'s under review') + '<div class="ad-card-body">' + accessForm + '</div></div>' +
     '<div class="ad-grid g-even">' +
       '<div class="ad-card">' + cardHead('Health checks', 'Configuration of this install') +
         '<div class="ad-score"><div class="ad-score-ring"><svg viewBox="0 0 72 72"><circle cx="36" cy="36" r="30" fill="none" stroke-width="8" style="stroke:var(--surface3)"/><circle cx="36" cy="36" r="30" fill="none" stroke-width="8" stroke-linecap="round" style="stroke:' + ringColor + '" stroke-dasharray="' + (C * score / 100).toFixed(1) + ' ' + C.toFixed(1) + '"/></svg><b>' + score + '</b></div>' +
@@ -913,7 +967,7 @@ function renderOAuthProvider(key) {
 
   var form =
     '<form data-form="oauth-settings" autocomplete="off"><input type="hidden" name="provider" value="' + key + '">' + alerts +
-      '<label class="ad-switch-row"><div><b>Allow “Sign in with ' + esc(m.name) + '”</b><small>When off, the ' + esc(m.name) + ' button shows “turned off by the site owner”. Accounts that already signed in with it are kept.</small></div>' +
+      '<label class="ad-switch-row"><div><b>Allow “Sign in with ' + esc(m.name) + '”</b><small>When off, the ' + esc(m.name) + ' button shows a “currently unavailable — under review” notice. Accounts that already signed in with it are kept.</small></div>' +
         '<span class="ad-switch"><input type="checkbox" name="enabled"' + (o.enabled ? ' checked' : '') + '><i></i></span></label>' +
       '<label class="ad-field"><span>' + m.idLabel + '</span><input class="ad-input ad-mono" name="clientId" value="' + esc(o.clientId) + '" placeholder="' + esc(m.idHint) + '" spellcheck="false" autocomplete="off"></label>' +
       '<label class="ad-field"><span>' + m.secretLabel + '</span><div class="ad-input-row"><input class="ad-input ad-mono" type="password" name="clientSecret" id="' + sid + '" placeholder="' + (o.secretSet && !o.secretError ? '•••••••••••• saved — leave blank to keep' : esc(m.secretHint)) + '" spellcheck="false" autocomplete="new-password">' +
@@ -976,7 +1030,7 @@ function renderSystem() {
   var used = disk.total != null && disk.free != null ? disk.total - disk.free : null, pct = used != null && disk.total ? Math.round(100 * used / disk.total) : null;
   var tables = (db.tables || []).map(function (t) { return { label: t.name + ' · ' + fmt(t.rows) + ' rows', count: t.bytes, raw: t.bytes }; });
   var kv = function (rows) { return '<dl class="ad-kv">' + rows.map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + (r[1] == null || r[1] === '' ? '—' : esc(r[1])) + '</dd>'; }).join('') + '</dl>'; };
-  var shortcuts = [['Ctrl K', 'Search &amp; command palette'], ['/', 'Focus the search box'], ['R', 'Refresh data'], ['G then O/U/P/N/S/X/I/H/F/Y', 'Go to Overview / Users / Projects / Notes / Snippets / Security / Google / GitHub / Facebook / System'], ['Esc', 'Close drawer, dialog or palette']];
+  var shortcuts = [['Ctrl K', 'Search &amp; command palette'], ['/', 'Focus the search box'], ['R', 'Refresh data'], ['G then O/U/P/N/S/M/X/I/H/F/Y', 'Go to Overview / Users / Projects / Notes / Snippets / Components / Security / Google / GitHub / Facebook / System'], ['Esc', 'Close drawer, dialog or palette']];
   return pageHead('System &amp; data', 'Server details, database size and downloadable backups.',
       '<button type="button" class="ad-btn ad-btn-primary" data-act="export-backup">' + ico('bx-cloud-download') + 'Download full backup</button>') +
     '<div class="ad-grid g2">' +
@@ -1009,17 +1063,17 @@ function renderSystem() {
 function isHtmlSnippet(r) { return /html/i.test(r.lang || '') || /^\s*</.test(r.code || ''); }
 
 function userDrawer(u) {
-  var cnt = S.userCounts[u.id], total = cnt.projects + cnt.notes + cnt.snippets, me = isMe(u.id);
+  var cnt = S.userCounts[u.id], total = cnt.projects + cnt.notes + cnt.snippets + cnt.components, me = isMe(u.id);
   var tab = S.drawer.tab || 'projects';
   var levelOpts = [['', 'Not set'], ['beginner', 'Beginner'], ['intermediate', 'Intermediate'], ['professional', 'Professional']].map(function (o) {
     return '<option value="' + o[0] + '"' + ((u.expertise_level || '') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
   }).join('');
   var provider = u.oauth_provider ? cap(u.oauth_provider) : 'Email + password';
 
-  var tabs = ['projects', 'notes', 'snippets'].map(function (k) {
+  var tabs = ['projects', 'notes', 'snippets', 'components'].map(function (k) {
     return '<button type="button" data-act="user-tab" data-k="' + k + '" class="' + (tab === k ? 'active' : '') + '">' + CONTENT[k].label + ' (' + cnt[k] + ')</button>';
   }).join('');
-  var items = S.data.content[tab].filter(function (r) { return r.user_id === u.id; });
+  var items = listOf(tab).filter(function (r) { return r.user_id === u.id; });
   var list = items.length ? items.slice(0, 8).map(function (r) {
     return '<div class="ad-row clickable" style="padding-left:0;padding-right:0" data-act="open-content" data-kind="' + tab + '" data-id="' + esc(r.id) + '" data-uid="' + esc(r.user_id) + '" data-from="' + esc(u.id) + '">' +
       '<span class="ad-type-ico ' + CONTENT[tab].tc + '">' + ico(CONTENT[tab].icon) + '</span><div class="ad-row-main"><b>' + esc(r[CONTENT[tab].titleKey]) + '</b><small>' + esc(CONTENT[tab].excerpt(r)) + '</small></div><div class="ad-row-end">' + esc(ago(r.updated_at)) + '</div></div>';
@@ -1066,11 +1120,12 @@ function userDrawer(u) {
 
 function contentDrawer(r) {
   var kind = S.drawer.kind, c = CONTENT[kind], tab = S.drawer.tab || 'view', title = r[c.titleKey];
-  var html = kind === 'snippets' && isHtmlSnippet(r);
+  var isCode = kind === 'snippets' || kind === 'components';
+  var html = isCode && isHtmlSnippet(r);
   var back = S.drawer.from && findUser(S.drawer.from);
 
-  var tabs = '<div class="ad-tabs"><button type="button" data-act="content-tab" data-k="view" class="' + (tab === 'view' ? 'active' : '') + '">' + (kind === 'snippets' ? 'Code' : kind === 'projects' ? 'Details' : 'Note') + '</button>' +
-    (kind === 'snippets' && html ? '<button type="button" data-act="content-tab" data-k="preview" class="' + (tab === 'preview' ? 'active' : '') + '">Live preview</button>' : '') +
+  var tabs = '<div class="ad-tabs"><button type="button" data-act="content-tab" data-k="view" class="' + (tab === 'view' ? 'active' : '') + '">' + (isCode ? 'Code' : kind === 'projects' ? 'Details' : 'Note') + '</button>' +
+    (isCode && html ? '<button type="button" data-act="content-tab" data-k="preview" class="' + (tab === 'preview' ? 'active' : '') + '">Live preview</button>' : '') +
     '<button type="button" data-act="content-tab" data-k="edit" class="' + (tab === 'edit' ? 'active' : '') + '">Edit</button></div>';
 
   var body = '';
@@ -1088,7 +1143,7 @@ function contentDrawer(r) {
     body = '<form data-form="content-edit">' + fields + '<div class="ad-actions"><button type="submit" class="ad-btn ad-btn-primary">Save changes</button><button type="button" class="ad-btn" data-act="content-tab" data-k="view">Cancel</button></div></form>';
   } else if (tab === 'preview') {
     body = '<div class="ad-alert ad-alert-info"><i class="bx bx-info-circle"></i><span>Runs in a sandboxed frame with no access to this dashboard.</span></div><iframe class="ad-preview" sandbox="allow-scripts" title="Snippet preview" srcdoc="' + esc(r.code || '') + '"></iframe>';
-  } else if (kind === 'snippets') {
+  } else if (isCode) {
     body = '<div class="ad-section-head"><h4>' + fmt((r.code || '').split('\n').length) + ' lines · ' + fmt((r.code || '').length) + ' chars</h4><button type="button" class="ad-btn ad-btn-sm" data-act="copy-code">' + ico('bx-copy') + 'Copy</button></div><pre class="ad-code">' + esc(r.code || '(empty)') + '</pre>';
   } else if (kind === 'notes') {
     body = '<div class="ad-note-body">' + (r.body ? esc(r.body) : '<span class="ad-muted">This note is empty.</span>') + '</div>';
@@ -1139,11 +1194,13 @@ var CSV_COLS = {
     { label: 'Level', get: function (r) { return r.expertise_level || ''; } }, { label: 'Sign-in method', get: function (r) { return r.oauth_provider || 'email + password'; } },
     { label: 'XP', key: 'points_total' }, { label: 'Streak', key: 'points_streak' }, { label: 'Last claim', get: function (r) { return r.last_claim_date || ''; } },
     { label: 'Projects', get: function (r) { return S.userCounts[r.id].projects; } }, { label: 'Notes', get: function (r) { return S.userCounts[r.id].notes; } },
-    { label: 'Snippets', get: function (r) { return S.userCounts[r.id].snippets; } }, { label: 'Joined', key: 'joined_at' }
+    { label: 'Snippets', get: function (r) { return S.userCounts[r.id].snippets; } }, { label: 'Components', get: function (r) { return S.userCounts[r.id].components; } },
+    { label: 'Joined', key: 'joined_at' }
   ],
   projects: [{ label: 'ID', key: 'id' }, { label: 'Owner ID', key: 'user_id' }, { label: 'Owner', key: 'owner_name' }, { label: 'Owner email', key: 'owner_email' }, { label: 'Name', key: 'name' }, { label: 'Technology', key: 'tech' }, { label: 'Description', key: 'description' }, { label: 'Created', key: 'created_at' }, { label: 'Updated', key: 'updated_at' }],
   notes: [{ label: 'ID', key: 'id' }, { label: 'Owner ID', key: 'user_id' }, { label: 'Owner', key: 'owner_name' }, { label: 'Owner email', key: 'owner_email' }, { label: 'Title', key: 'title' }, { label: 'Body', key: 'body' }, { label: 'Created', key: 'created_at' }, { label: 'Updated', key: 'updated_at' }],
-  snippets: [{ label: 'ID', key: 'id' }, { label: 'Owner ID', key: 'user_id' }, { label: 'Owner', key: 'owner_name' }, { label: 'Owner email', key: 'owner_email' }, { label: 'Title', key: 'title' }, { label: 'Language', key: 'lang' }, { label: 'Code', key: 'code' }, { label: 'Created', key: 'created_at' }, { label: 'Updated', key: 'updated_at' }]
+  snippets: [{ label: 'ID', key: 'id' }, { label: 'Owner ID', key: 'user_id' }, { label: 'Owner', key: 'owner_name' }, { label: 'Owner email', key: 'owner_email' }, { label: 'Title', key: 'title' }, { label: 'Language', key: 'lang' }, { label: 'Code', key: 'code' }, { label: 'Created', key: 'created_at' }, { label: 'Updated', key: 'updated_at' }],
+  components: [{ label: 'ID', key: 'id' }, { label: 'Owner ID', key: 'user_id' }, { label: 'Owner', key: 'owner_name' }, { label: 'Owner email', key: 'owner_email' }, { label: 'Title', key: 'title' }, { label: 'Code', key: 'code' }, { label: 'Created', key: 'created_at' }, { label: 'Updated', key: 'updated_at' }]
 };
 function selectedRows(kind) {
   var keys = Object.keys(S.sel[kind]);
@@ -1166,7 +1223,7 @@ function exportBackup() {
   var d = S.data, out = {
     app: 'A-Code Playground', exportedAt: new Date().toISOString(), exportedBy: BOOT.admin.email, counts: d.counts,
     users: d.users.map(function (u) { var c = {}; for (var k in u) if (k !== 'has_password') c[k] = u[k]; return c; }),
-    projects: d.content.projects, notes: d.content.notes, snippets: d.content.snippets
+    projects: d.content.projects, notes: d.content.notes, snippets: listOf('snippets'), components: listOf('components')
   };
   download('acode-backup-' + stamp() + '.json', 'application/json', JSON.stringify(out, null, 2));
   toast('Backup downloaded (password hashes are never included).', 'ok');
@@ -1219,9 +1276,9 @@ function palItems(q) {
     S.data.users.filter(function (u) { return match(u.name + ' ' + u.email); }).slice(0, 5).forEach(function (u) {
       out.push({ group: 'Users', icon: 'bx-user', cls: 't-user', title: u.name, sub: u.email + ' · ' + u.role, run: function () { openDrawer({ type: 'user', id: u.id }); } });
     });
-    ['projects', 'notes', 'snippets'].forEach(function (k) {
+    ['projects', 'notes', 'snippets', 'components'].forEach(function (k) {
       var c = CONTENT[k];
-      S.data.content[k].filter(function (r) { return c.search.some(function (f) { return lower(r[f]).indexOf(q) > -1; }); }).slice(0, 4).forEach(function (r) {
+      listOf(k).filter(function (r) { return c.search.some(function (f) { return lower(r[f]).indexOf(q) > -1; }); }).slice(0, 4).forEach(function (r) {
         out.push({ group: c.label, icon: c.icon, cls: c.tc, title: r[c.titleKey], sub: 'by ' + r.owner_name, run: function () { openDrawer({ type: 'content', kind: k, id: r.id, uid: r.user_id }); } });
       });
     });
@@ -1289,14 +1346,14 @@ function deleteUsers(ids) {
   });
 }
 function deleteContent(kind, pairs) {
-  var c = CONTENT[kind], one = pairs.length === 1, r = one ? findContent(kind, pairs[0].id, pairs[0].uid) : null;
+  var c = CONTENT[kind], srvType = c.serverType || c.singular, one = pairs.length === 1, r = one ? findContent(kind, pairs[0].id, pairs[0].uid) : null;
   return confirmBox({
     title: one ? 'Delete this ' + c.singular + '?' : 'Delete ' + pairs.length + ' ' + c.label.toLowerCase() + '?', danger: true, confirmText: 'Delete',
     message: one && r ? '“' + esc(trunc(r[c.titleKey], 60)) + '” by ' + esc(r.owner_name) + ' will be permanently removed.' : 'They will be permanently removed from their owners\' workspaces.', type: pairs.length > 5 ? 'DELETE' : ''
   }).then(function (ok) {
     if (!ok) return;
-    var call = one ? mutate('delete-content', { type: c.singular, id: pairs[0].id, userId: pairs[0].uid, title: r ? r[c.titleKey] : '' }, c.singular === 'note' ? 'Note deleted.' : cap(c.singular) + ' deleted.')
-      : mutate('bulk-delete', { type: c.singular, items: pairs.map(function (p) { return { id: p.id, userId: p.uid }; }) }, function (res) { return plural(res.deleted || 0, c.singular) + ' deleted.'; });
+    var call = one ? mutate('delete-content', { type: srvType, id: pairs[0].id, userId: pairs[0].uid, title: r ? r[c.titleKey] : '' }, c.singular === 'note' ? 'Note deleted.' : cap(c.singular) + ' deleted.')
+      : mutate('bulk-delete', { type: srvType, items: pairs.map(function (p) { return { id: p.id, userId: p.uid }; }) }, function (res) { return plural(res.deleted || 0, c.singular) + ' deleted.'; });
     return call.then(function (res) {
       if (res && res.ok) {
         pairs.forEach(function (p) { delete S.sel[kind][p.uid + '|' + p.id]; });
@@ -1339,6 +1396,11 @@ function updateNavCounts() {
     var k = el.getAttribute('data-count');
     if (k === 'security') { var n = S.data.lockouts.length; el.hidden = !n; el.textContent = n; }
     else if (k === 'integrations') { var gl = (S.data.google && S.data.google.links || []).length; el.hidden = !gl; el.textContent = gl; }
+    // The `snippets` table holds both plain snippets and saved components
+    // (see the CONTENT comment above listOf()) — split the one server
+    // count between the two sidebar badges instead of double-counting.
+    else if (k === 'snippets') el.textContent = fmt(listOf('snippets').length);
+    else if (k === 'components') el.textContent = fmt(listOf('components').length);
     else el.textContent = fmt(c[k]);
   });
 }
@@ -1407,7 +1469,8 @@ var ACT = {
   'export-csv': function (el) { exportCSV(el.dataset.kind); },
   'export-audit': exportAudit,
   'export-backup': exportBackup,
-  'audit-kind': function (el) { S.audit.kind = el.dataset.k; render(); },
+  'audit-kind': function (el) { S.audit.kind = el.dataset.k; S.audit.page = 1; render(); },
+  'audit-page': function (el) { S.audit.page += (+el.dataset.d || 0); $('#adAudit').innerHTML = auditList(); },
   'clear-lockout': function (el) { mutate('clear-lockout', { key: el.dataset.key }, 'Lockout cleared.'); },
   'clear-all-lockouts': function () {
     confirmBox({ title: 'Unlock all accounts?', icon: 'bx-lock-open-alt', iconClass: 'info', confirmText: 'Unlock all', message: 'Every currently locked-out login will be able to try again immediately.' })
@@ -1474,8 +1537,11 @@ var FORMS = {
     if (payload.enabled && (!payload.clientId || !(payload.clientSecret || o.secretSet))) { toast('Fill in the ' + m.idLabel + ' and ' + m.secretLabel.toLowerCase() + ' before switching it on.', 'bad'); return; }
     return mutate('oauth-save', payload, m.name + ' settings saved.', btn).then(function (res) { if (res && res.ok && test) return runOAuthTest(key); });
   },
+  'access-settings': function (f, btn) {
+    return mutate('access-save', { signinEnabled: f.signinEnabled.checked, signupEnabled: f.signupEnabled.checked }, 'Sign in / Sign up availability saved.', btn);
+  },
   'content-edit': function (f, btn) {
-    var d = S.drawer, c = CONTENT[d.kind], p = { type: c.singular, id: d.id, userId: d.uid };
+    var d = S.drawer, c = CONTENT[d.kind], p = { type: c.serverType || c.singular, id: d.id, userId: d.uid };
     if (d.kind === 'projects') { p.name = f.name.value.trim(); p.tech = f.tech.value.trim(); p.description = f.description.value; }
     else if (d.kind === 'notes') { p.title = f.title.value.trim(); p.body = f.body.value; }
     else { p.title = f.title.value.trim(); p.lang = f.lang.value.trim(); p.code = f.code.value; }
@@ -1568,7 +1634,7 @@ document.addEventListener('keydown', function (e) {
   if (typing || e.ctrlKey || e.metaKey || e.altKey || S.locked || !$('#adModalWrap').hidden) return;
   if (S.gPending) {
     S.gPending = false; clearTimeout(S.gTimer);
-    var map = { o: 'overview', u: 'users', p: 'projects', n: 'notes', s: 'snippets', x: 'security', i: 'integrations', h: 'github', f: 'facebook', y: 'system' };
+    var map = { o: 'overview', u: 'users', p: 'projects', n: 'notes', s: 'snippets', m: 'components', x: 'security', i: 'integrations', h: 'github', f: 'facebook', y: 'system' };
     if (map[lower(e.key)]) { e.preventDefault(); location.hash = '#/' + map[lower(e.key)]; }
     return;
   }
@@ -1581,7 +1647,7 @@ document.addEventListener('input', function (e) {
   if (el.id === 'adPalInput') { pal.idx = 0; palRender(); return; }
   var kind = el.getAttribute && el.getAttribute('data-input');
   if (kind === 'search') { debounceSearch(el); }
-  else if (kind === 'audit-search') { S.audit.q = el.value; $('#adAudit').innerHTML = auditList(); }
+  else if (kind === 'audit-search') { S.audit.q = el.value; S.audit.page = 1; $('#adAudit').innerHTML = auditList(); }
 });
 var debounceSearch = debounce(function (el) { var st = S.t[el.dataset.kind]; st.q = el.value; st.page = 1; updateTable(); }, 140);
 document.addEventListener('change', function (e) {

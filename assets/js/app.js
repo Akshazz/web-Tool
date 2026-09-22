@@ -269,10 +269,14 @@ function syncNavGroupAria(){
 }
 function openNavFlyout(){
   if(!canPopover||!navGroupToggle)return;
+  // Reopening while the close animation is still mid-flight (hidePopover() hasn't run yet,
+  // see closeNavFlyout): it's already showing, so just cancel the close instead of re-showing it.
+  const alreadyShowing=navFlyout.classList.contains('is-closing');
+  navFlyout.classList.remove('is-closing');
   const r=navGroupToggle.getBoundingClientRect();
   navFlyout.style.left=Math.round(r.right+10)+'px';
   navFlyout.style.top=Math.round(r.top)+'px';
-  navFlyout.showPopover();
+  if(!alreadyShowing)navFlyout.showPopover();
   navFlyout.classList.add('is-open');
   // keep it fully on screen if the icon sits near the bottom edge
   const over=r.top+navFlyout.offsetHeight-(window.innerHeight-8);
@@ -283,9 +287,18 @@ function openNavFlyout(){
 function closeNavFlyout(returnFocus){
   if(!canPopover||!flyoutOpen())return;
   navFlyout.classList.remove('is-open');
-  try{navFlyout.hidePopover()}catch(err){}
   syncNavGroupAria();
   if(returnFocus)navGroupToggle?.focus();
+  // Play the closing animation before actually hiding it - a native popover otherwise just
+  // disappears instantly the moment hidePopover() runs, with no chance for CSS to animate it.
+  navFlyout.classList.add('is-closing');
+  const finishClose=()=>{
+    navFlyout.classList.remove('is-closing');
+    navFlyout.removeEventListener('animationend',finishClose);
+    try{navFlyout.hidePopover()}catch(err){}
+  };
+  navFlyout.addEventListener('animationend',finishClose,{once:true});
+  setTimeout(finishClose,140); // fallback if the animation is skipped (e.g. reduced motion)
 }
 navGroupToggle?.addEventListener('click',()=>{
   if(inRail()){flyoutOpen()?closeNavFlyout():openNavFlyout();return}
@@ -1205,7 +1218,7 @@ function pointsSyncAward(kind,key){
 /* Pull the server's authoritative points + clock (on focus / periodically). */
 function resyncFromServer(){
   if(!CSRF_TOKEN||document.hidden)return;
-  fetch(DISK_ENDPOINT+'?action=get-points').then(r=>r.json()).then(res=>{
+  fetch(DISK_ENDPOINT+'?action=get-points',{headers:{'X-ACP-Passive':'1'}}).then(r=>r.json()).then(res=>{
     if(!res||!res.ok)return;
     setServerClock(res.clock);
     if(res.points){store.set('points',{total:res.points.total,lastClaimDate:res.points.lastClaimDate,streak:res.points.streak})}
@@ -1215,7 +1228,7 @@ function resyncFromServer(){
 function dailyBonusAmount(streak){return Math.min(10+(Math.max(streak,1)-1)*2,30)}
 /* Extra "final benefits" reward stacked on top of the daily amount every
    time a run of claims completes a 7-day week (day 7, 14, 21...) — shown
-   in the dashboard's 7-Day Streak calendar as the crowned final day.
+   in the dashboard's Daily Login calendar as the crowned final day.
    Mirrored server-side in weeklyFinalBonus() in save-data.php. */
 const FINAL_STREAK_BONUS=15;
 function weeklyFinalBonus(streak){return streak>0&&streak%7===0?FINAL_STREAK_BONUS:0}
@@ -1487,7 +1500,7 @@ function renderSessionXpPill(){
   const el=$('#xpSessionPill');
   if(el)el.innerHTML='<i class="bx bxs-bolt"></i> +'+getSessionXp()+' XP this session';
 }
-/* Drives the dashboard's 7-Day Streak calendar. The raw streak counter
+/* Drives the dashboard's Daily Login calendar. The raw streak counter
    keeps climbing forever (it's what dailyBonusAmount() scales off of),
    but the calendar always shows it as a repeating Mon-Sun-style 7-day
    week: cycleDay is just where the current streak lands inside that
@@ -1583,7 +1596,16 @@ body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f5f6f
 h1{margin:8px 0;font-size:38px;letter-spacing:-.04em}
 p{color:#68707a;line-height:1.6}
 button{border:0;border-radius:10px;padding:11px 16px;background:#15171a;color:#fff;font-weight:700;cursor:pointer}
-button:hover{transform:translateY(-1px)}`;
+button:hover{transform:translateY(-1px)}
+
+/* @media = a mobile-responsive rule: everything inside it only applies
+   when the browser (or, here, the preview) is narrower than 480px.
+   Switch the preview to "Mobile" above to see it turn on. */
+@media (max-width: 480px){
+  .demo{padding:22px;border-radius:14px}
+  h1{font-size:28px}
+  button{width:100%}
+}`;
 const DEFAULT_JS=`document.getElementById('demoButton')?.addEventListener('click',()=>{
   document.getElementById('demoButton').textContent='It works!';
 });`;
@@ -1992,7 +2014,7 @@ window.snippetCategory=snippetCategory;
 (function(){
   const tips={
     1:'Open the HTML tab and change the text inside a heading, paragraph, or button. HTML controls what appears on the page.',
-    2:'Open CSS and change a simple value such as a background, padding, font-size, or border-radius. CSS controls how the page looks.',
+    2:'Open CSS and change a simple value such as a background, padding, font-size, or border-radius. Then scroll to the bottom of the CSS — the @media rule there only applies on narrow screens. Switch the preview to “Mobile” above to see it kick in.',
     3:'Open JavaScript and change the button action. JavaScript controls what happens after a user clicks, types, or interacts.',
     4:'Press Run my code. The right side is your result. If the result is wrong, change one small thing and run again.'
   };
@@ -2366,10 +2388,55 @@ window.snippetCategory=snippetCategory;
     observer.observe(modal,{attributes:true,attributeFilter:['class']});
   }
 
+  /* --- Profile "About" fields: bio / location / hobbies / skills ---------
+     All optional. Kept in one place (source of truth for both the view and
+     edit modals) so a new mastery level or quick-pick suggestion only needs
+     to change here. `window.CURRENT_USER_PROFILE` is printed by index.php
+     from the account row and refreshed in place after every save so a
+     reopened modal never needs a round trip to the server just to redraw. */
+  const SKILL_LEVELS=[
+    {v:'beginner',label:'Beginner'},
+    {v:'intermediate',label:'Intermediate'},
+    {v:'advanced',label:'Advanced'},
+    {v:'expert',label:'Expert'}
+  ];
+  function skillLevelLabel(v){return (SKILL_LEVELS.find(l=>l.v===v)||SKILL_LEVELS[1]).label}
+  const SKILL_SUGGESTIONS=['JavaScript','PHP','Python','MySQL','HTML5 / CSS3','React','Node.js','Java','TypeScript','C++'];
+  const HOBBY_SUGGESTIONS=['Gaming','Reading','Photography','Music','Traveling','Drawing','Hiking','Cooking'];
+  const PROFILE_BIO_MAX=280;
+  /* ISO 3166-1 alpha-2 codes for the Country dropdown — flag emoji is
+     derived from the code itself (regional-indicator trick) rather than
+     stored per-entry, so the list stays a single short line per country. */
+  const COUNTRY_CODES={Philippines:'PH','United States':'US','United Kingdom':'GB',Canada:'CA',Australia:'AU','New Zealand':'NZ',Singapore:'SG',Malaysia:'MY',Indonesia:'ID',Thailand:'TH',Vietnam:'VN',Japan:'JP','South Korea':'KR',China:'CN','Hong Kong':'HK',Taiwan:'TW',India:'IN',Pakistan:'PK',Bangladesh:'BD','Sri Lanka':'LK',Nepal:'NP','United Arab Emirates':'AE','Saudi Arabia':'SA',Qatar:'QA',Kuwait:'KW',Israel:'IL',Turkey:'TR',Egypt:'EG',Nigeria:'NG',Kenya:'KE','South Africa':'ZA',Ghana:'GH',Germany:'DE',France:'FR',Spain:'ES',Italy:'IT',Netherlands:'NL',Belgium:'BE',Switzerland:'CH',Austria:'AT',Sweden:'SE',Norway:'NO',Denmark:'DK',Finland:'FI',Poland:'PL',Portugal:'PT',Greece:'GR',Ireland:'IE',Russia:'RU',Ukraine:'UA','Czech Republic':'CZ',Romania:'RO',Hungary:'HU',Mexico:'MX',Brazil:'BR',Argentina:'AR',Chile:'CL',Colombia:'CO',Peru:'PE'};
+  const COUNTRIES=Object.keys(COUNTRY_CODES).sort((a,b)=>a.localeCompare(b));
+  function countryFlag(name){
+    const code=COUNTRY_CODES[name];
+    if(!code)return '';
+    return code.toUpperCase().replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0)));
+  }
+  /* `location` is stored server-side as one free-text string ("City,
+     Country") so no schema change was needed to add a proper Country
+     dropdown here — this just splits/joins it at the edges. */
+  function splitLocation(location){
+    const parts=String(location||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(!parts.length)return {city:'',country:''};
+    const last=parts[parts.length-1];
+    if(COUNTRY_CODES[last])return {city:parts.slice(0,-1).join(', '),country:last};
+    return {city:parts.join(', '),country:''};
+  }
+  function joinLocation(city,country){return [city,country].map(s=>String(s||'').trim()).filter(Boolean).join(', ')}
+  function currentProfile(){
+    const p=(typeof window!=='undefined'&&window.CURRENT_USER_PROFILE)?window.CURRENT_USER_PROFILE:{};
+    return {bio:p.bio||'',location:p.location||'',hobbies:p.hobbies||'',skills:Array.isArray(p.skills)?p.skills:[]};
+  }
+  function hobbyTags(hobbies){return String(hobbies||'').split(',').map(h=>h.trim()).filter(Boolean)}
+
+
   /* --- View Profile modal (account dropdown) ----------------------------
-     Read-only profile summary — avatar/rank/XP/stats/join date — with an
-     "Edit Profile" action inside that swaps in the actual edit form below,
-     so people see their account before jumping into editing it. */
+     Read-only profile summary — avatar/rank/XP/stats/join date, plus the
+     optional About section (bio/location/hobbies/skills) when filled in —
+     with an "Edit Profile" action inside that swaps in the actual edit
+     form below, so people see their account before jumping into editing it. */
   function viewProfileForm(){
     const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
     const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
@@ -2378,6 +2445,15 @@ window.snippetCategory=snippetCategory;
     const joined=window.CURRENT_USER_JOINED_AT?new Date(String(window.CURRENT_USER_JOINED_AT).replace(' ','T')):null;
     const joinedLabel=(joined&&!isNaN(joined))?joined.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}):'—';
     const counts={projects:store.get('projects').length,snippets:store.get('snippets').filter(x=>snippetSource(x)==='snippet').length,components:store.get('snippets').filter(x=>snippetSource(x)==='component').length,notes:store.get('notes').length};
+    const profile=currentProfile();
+    const hobbies=hobbyTags(profile.hobbies);
+    const hasAbout=profile.bio||profile.location||hobbies.length||profile.skills.length;
+    const aboutHtml=!hasAbout?'':`<div class="profile-view-about">
+        ${profile.bio?`<p class="profile-view-bio">${escapeHtml(profile.bio)}</p>`:''}
+        ${profile.location?(()=>{const loc=splitLocation(profile.location),flag=countryFlag(loc.country);return `<p class="muted profile-view-location">${flag?`<span class="location-flag">${flag}</span>`:'<i class="bx bx-map"></i>'} ${escapeHtml(profile.location)}</p>`})():''}
+        ${hobbies.length?`<div class="profile-view-section"><span class="profile-view-label">Hobbies</span><div class="profile-tag-row">${hobbies.map(h=>`<span class="hobby-chip">${escapeHtml(h)}</span>`).join('')}</div></div>`:''}
+        ${profile.skills.length?`<div class="profile-view-section"><span class="profile-view-label">Skills</span><div class="profile-tag-row">${profile.skills.map(sk=>`<span class="skill-chip skill-level-${escapeAttr(sk.level)}">${escapeHtml(sk.name)}<em>${escapeHtml(skillLevelLabel(sk.level))}</em></span>`).join('')}</div></div>`:''}
+      </div>`;
     openModal(`<div class="profile-view">
       <div class="profile-view-avatar account-avatar-ring ${rank.cls}"><span class="account-avatar-initial">${escapeHtml(initial)}</span><span class="account-avatar-badge"><i class="bx ${rank.icon}"></i></span></div>
       <h2 class="profile-view-name">${escapeHtml(curName)}</h2>
@@ -2392,37 +2468,104 @@ window.snippetCategory=snippetCategory;
         <div class="profile-stat"><strong>${counts.notes}</strong><span>Notes</span></div>
       </div>
       <p class="muted profile-view-joined"><i class="bx bx-calendar"></i> Member since ${escapeHtml(joinedLabel)}</p>
+      ${aboutHtml}
       <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Close</button><button class="primary-btn" id="goEditProfileBtn"><i class="bx bx-pencil"></i> Edit Profile</button></div>
     </div>`,'modal-profile');
     const goEditBtn=$('#goEditProfileBtn');
     if(goEditBtn)goEditBtn.onclick=()=>editProfileForm();
   }
 
-  /* --- Edit Profile modal (opened from View Profile) --------------------- */
+  /* --- Edit Profile modal (opened from View Profile) ---------------------
+     Name/email/password stay exactly as before; everything under "About
+     you (optional)" is new and never blocks saving when left blank. */
   function editProfileForm(){
     const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
     const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
+    const profile=currentProfile();
+    const bioLen=(profile.bio||'').length;
+    const loc=splitLocation(profile.location);
     openModal(`<h2>Edit Profile</h2><p class="modal-subtitle">Update your account name, email, or password.</p>
-      <label>Name<input id="epName" class="input" value="${escapeAttr(curName)}" placeholder="Your name"></label>
-      <label>Email<input id="epEmail" class="input" type="email" value="${escapeAttr(curEmail)}" placeholder="you@example.com"></label>
+      <label>Name<div class="field-group"><i class="bx bx-user field-icon"></i><input id="epName" class="input has-icon" value="${escapeAttr(curName)}" placeholder="Your name"></div></label>
+      <label>Email<div class="field-group"><i class="bx bx-envelope field-icon"></i><input id="epEmail" class="input has-icon" type="email" value="${escapeAttr(curEmail)}" placeholder="you@example.com"></div></label>
       <p class="muted" style="margin:0 0 8px">Leave the password fields blank to keep your current password.</p>
-      <label>Current password<input id="epCurPass" class="input" type="password" placeholder="Only needed to change your password" autocomplete="current-password"></label>
-      <label>New password<input id="epNewPass" class="input" type="password" placeholder="At least 6 characters" autocomplete="new-password"></label>
+      <label>Current password<div class="field-group"><i class="bx bx-lock-alt field-icon"></i><input id="epCurPass" class="input has-icon" type="password" placeholder="Only needed to change your password" autocomplete="current-password"></div></label>
+      <label>New password<div class="field-group"><i class="bx bx-lock field-icon"></i><input id="epNewPass" class="input has-icon" type="password" placeholder="At least 6 characters" autocomplete="new-password"></div></label>
+      <div class="modal-section-divider"><span>About you <em>(optional)</em></span></div>
+      <label>Bio<div class="field-group field-textarea-wrap"><i class="bx bx-message-square-detail field-icon field-icon-top"></i><textarea id="epBio" class="input has-icon" rows="3" maxlength="${PROFILE_BIO_MAX}" placeholder="A short line about yourself">${escapeHtml(profile.bio)}</textarea><span class="field-char-count" id="epBioCount">${bioLen}/${PROFILE_BIO_MAX}</span></div></label>
+      <div class="form-grid">
+        <label>City<div class="field-group"><i class="bx bx-map-pin field-icon"></i><input id="epCity" class="input has-icon" value="${escapeAttr(loc.city)}" placeholder="e.g. Quezon City"></div></label>
+        <label>Country<div class="field-group field-select-wrap"><i class="bx bx-flag field-icon"></i><select id="epCountry" class="input has-icon"><option value="">Select country…</option>${COUNTRIES.map(c=>`<option value="${escapeAttr(c)}"${c===loc.country?' selected':''}>${countryFlag(c)} ${escapeHtml(c)}</option>`).join('')}</select></div></label>
+      </div>
+      <label>Hobbies<div class="field-group"><i class="bx bx-heart field-icon"></i><input id="epHobbies" class="input has-icon" autocomplete="off" value="${escapeAttr(profile.hobbies)}" placeholder="Gaming, Reading, Photography"></div></label>
+      <div class="tech-suggest" id="hobbySuggest">${HOBBY_SUGGESTIONS.map(h=>`<button type="button" class="tech-chip" data-hobby="${escapeAttr(h)}">${escapeHtml(h)}</button>`).join('')}</div>
+      <label style="margin-top:12px">Skills &amp; mastery<span class="muted" style="font-weight:500"> — languages, frameworks, tools you know</span></label>
+      <div class="tech-suggest" id="skillSuggest">${SKILL_SUGGESTIONS.map(s=>`<button type="button" class="tech-chip" data-skill="${escapeAttr(s)}">${escapeHtml(s)}</button>`).join('')}</div>
+      <div id="skillRows" class="skill-rows"></div>
+      <button type="button" class="ghost-btn" id="addSkillRowBtn" style="margin:4px 0 10px"><i class="bx bx-plus"></i> Add skill</button>
       <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`,'modal-profile');
+
+    /* Bio char counter */
+    const bioEl=$('#epBio'),bioCountEl=$('#epBioCount');
+    bioEl?.addEventListener('input',()=>{if(bioCountEl)bioCountEl.textContent=bioEl.value.length+'/'+PROFILE_BIO_MAX});
+
+    /* Hobbies: same comma-separated-input + quick-pick-chip pattern used for
+       a project's Technology field, so toggling a suggestion adds/removes
+       it from the text input and typing manually keeps the chips in sync. */
+    const hobbiesEl=$('#epHobbies');
+    function hobbyList(){return hobbiesEl.value.split(',').map(t=>t.trim()).filter(Boolean)}
+    function syncHobbyChips(){const list=hobbyList().map(t=>t.toLowerCase());$$('#hobbySuggest .tech-chip').forEach(chip=>chip.classList.toggle('active',list.includes(chip.dataset.hobby.toLowerCase())))}
+    $$('#hobbySuggest .tech-chip').forEach(chip=>chip.addEventListener('click',()=>{
+      const term=chip.dataset.hobby,list=hobbyList(),idx=list.findIndex(t=>t.toLowerCase()===term.toLowerCase());
+      if(idx>-1)list.splice(idx,1);else list.push(term);
+      hobbiesEl.value=list.join(', ');
+      syncHobbyChips();hobbiesEl.focus();
+    }));
+    hobbiesEl?.addEventListener('input',syncHobbyChips);
+    syncHobbyChips();
+
+    /* Skills: a small repeatable row (name + mastery level + remove) per
+       skill, rendered from an in-memory array and redrawn on every change —
+       simplest way to keep the rows, the quick-pick chips' active state,
+       and what actually gets submitted all in sync. */
+    const skillRowsEl=$('#skillRows');
+    let skills=profile.skills.map(s=>({name:s.name,level:s.level||'intermediate'}));
+    function renderSkillRows(){
+      skillRowsEl.innerHTML=skills.map((sk,i)=>`<div class="skill-row" data-i="${i}">
+          <div class="field-group"><i class="bx bx-code-alt field-icon"></i><input class="input has-icon skill-name-input" data-i="${i}" value="${escapeAttr(sk.name)}" placeholder="e.g. JavaScript"></div>
+          <select class="input skill-level-select" data-i="${i}">${SKILL_LEVELS.map(l=>`<option value="${l.v}"${l.v===sk.level?' selected':''}>${l.label}</option>`).join('')}</select>
+          <button type="button" class="icon-btn skill-remove-btn" data-i="${i}" aria-label="Remove skill"><i class="bx bx-trash"></i></button>
+        </div>`).join('');
+      $$('.skill-name-input',skillRowsEl).forEach(inp=>inp.addEventListener('input',()=>{skills[+inp.dataset.i].name=inp.value;syncSkillChips()}));
+      $$('.skill-level-select',skillRowsEl).forEach(sel=>sel.addEventListener('change',()=>{skills[+sel.dataset.i].level=sel.value}));
+      $$('.skill-remove-btn',skillRowsEl).forEach(btn=>btn.addEventListener('click',()=>{skills.splice(+btn.dataset.i,1);renderSkillRows();syncSkillChips()}));
+      syncSkillChips();
+    }
+    function syncSkillChips(){const names=skills.map(s=>s.name.trim().toLowerCase()).filter(Boolean);$$('#skillSuggest .tech-chip').forEach(chip=>chip.classList.toggle('active',names.includes(chip.dataset.skill.toLowerCase())))}
+    $('#addSkillRowBtn')?.addEventListener('click',()=>{skills.push({name:'',level:'intermediate'});renderSkillRows();$$('.skill-name-input',skillRowsEl).pop()?.focus()});
+    $$('#skillSuggest .tech-chip').forEach(chip=>chip.addEventListener('click',()=>{
+      const term=chip.dataset.skill,idx=skills.findIndex(s=>s.name.trim().toLowerCase()===term.toLowerCase());
+      if(idx>-1)skills.splice(idx,1);else skills.push({name:term,level:'intermediate'});
+      renderSkillRows();
+    }));
+    renderSkillRows();
+
     const saveBtn=$('#saveProfileBtn');
     saveBtn.onclick=()=>{
       const name=$('#epName').value.trim(),email=$('#epEmail').value.trim();
       const currentPassword=$('#epCurPass').value,newPassword=$('#epNewPass').value;
+      const bio=bioEl.value.trim(),location=joinLocation($('#epCity').value,$('#epCountry').value),hobbies=hobbiesEl.value.trim();
+      const cleanSkills=skills.map(s=>({name:s.name.trim(),level:s.level})).filter(s=>s.name);
       if(!name||!email){toast('Name and email cannot be empty.');return}
       if(newPassword&&newPassword.length<6){toast('New password needs to be at least 6 characters.');return}
       if(newPassword&&!currentPassword){toast('Enter your current password to set a new one.');return}
       saveBtn.disabled=true;saveBtn.innerHTML='<i class="bx bx-loader-alt bx-spin"></i> Saving...';
-      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update-profile',name,email,currentPassword,newPassword,csrf:CSRF_TOKEN})})
+      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update-profile',name,email,currentPassword,newPassword,bio,location,hobbies,skills:cleanSkills,csrf:CSRF_TOKEN})})
         .then(r=>r.json())
         .then(res=>{
           if(res&&res.ok){
             if(nameEl)nameEl.textContent=res.user.name;
             if(emailEl)emailEl.textContent=res.user.email;
+            window.CURRENT_USER_PROFILE={bio:res.user.bio||'',location:res.user.location||'',hobbies:res.user.hobbies||'',skills:Array.isArray(res.user.skills)?res.user.skills:[]};
             closeModal();
             toast('Profile updated');
           }else{
@@ -2465,4 +2608,46 @@ window.snippetCategory=snippetCategory;
         .catch(()=>{ window.location.href='?page=landing'; });
     });
   }
+})();
+
+/* ---------------------------------------------------------------------
+   Auto sign-out after inactivity — 30 minutes (ACODEPLAYGROUND_IDLE_TIMEOUT
+   in core/security.php, handed over as window.IDLE_TIMEOUT_MS). Any click,
+   key press, scroll, touch or mouse move counts as activity, in any open tab
+   of this site. A warning shows for the last 60 seconds. The server enforces
+   the same limit, so closing the tab doesn't extend the session.
+--------------------------------------------------------------------- */
+(function(){
+  if(!CSRF_TOKEN)return;
+  const LIMIT=window.IDLE_TIMEOUT_MS||1800000, WARN=60000, KEY='acpLastActivity';
+  let last=Date.now(), lastWrite=0, banner=null, done=false;
+  const read=()=>{try{const v=parseInt(localStorage.getItem(KEY),10);return v>0?v:0}catch(e){return 0}};
+  const write=t=>{try{localStorage.setItem(KEY,String(t))}catch(e){}};
+  write(last);
+  function hideBanner(){if(banner){banner.remove();banner=null}}
+  function bump(){
+    const now=Date.now(); last=now;
+    if(now-lastWrite>5000){lastWrite=now;write(now)}
+    hideBanner();
+  }
+  ['mousemove','mousedown','keydown','scroll','wheel','touchstart','click'].forEach(ev=>window.addEventListener(ev,bump,{passive:true,capture:true}));
+  function signOut(){
+    if(done)return; done=true;
+    fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',csrf:CSRF_TOKEN})})
+      .catch(()=>{}).then(()=>{window.location.href='?page=landing&expired=1'});
+  }
+  setInterval(()=>{
+    const idle=Date.now()-Math.max(last,read());
+    if(idle>=LIMIT){signOut();return}
+    if(idle>=LIMIT-WARN){
+      if(!banner){
+        banner=document.createElement('div');
+        banner.setAttribute('role','alert');
+        banner.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;max-width:92vw;padding:12px 18px;border-radius:12px;background:var(--surface,#fff);color:var(--text,#111);border:1px solid var(--border,#ccc);box-shadow:0 10px 30px rgba(0,0,0,.25);font:600 14px/1.4 system-ui,sans-serif;text-align:center';
+        document.body.appendChild(banner);
+      }
+      const secs=Math.max(0,Math.ceil((LIMIT-idle)/1000));
+      banner.textContent='You will be signed out in '+secs+'s because of inactivity. Move the mouse or press a key to stay signed in.';
+    }else hideBanner();
+  },1000);
 })();

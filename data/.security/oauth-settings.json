@@ -2,8 +2,15 @@
     "github": {
         "enabled": true,
         "client_id": "Ov23lika2Op1I7xx05Il",
-        "client_secret_enc": "84wKutke1PxfopbvRvucYIewVXyilx/UbOFQ0enBjGlLUwFyz2GCFZr6sThfXsI44UnorFLO9/8ZrDuTm6jPg3KDL9M=",
-        "updated_at": "2026-09-21 13:01:08",
+        "client_secret_enc": "l3Zmf8p+5KssD4DJDEnU70tS7yqHGH5eaybeolF+3QChq4hSttQy9rHsrAAele2Yx1DcIfR4fjZcEHR5Duz9adn6lVI=",
+        "updated_at": "2026-09-22 04:01:23",
+        "updated_by": "akshaz.masteh@gmail.com"
+    },
+    "facebook": {
+        "enabled": false,
+        "client_id": "",
+        "client_secret_enc": "",
+        "updated_at": "2026-09-22 04:01:12",
         "updated_by": "akshaz.masteh@gmail.com"
     }
 }

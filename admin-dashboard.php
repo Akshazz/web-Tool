@@ -203,6 +203,7 @@ $bootData = array(
             <a href="#/projects" class="ad-nav-item" data-view="projects"><i class="bx bx-folder"></i><span>Projects</span><b class="ad-count" data-count="projects">–</b></a>
             <a href="#/notes" class="ad-nav-item" data-view="notes"><i class="bx bx-note"></i><span>Notes</span><b class="ad-count" data-count="notes">–</b></a>
             <a href="#/snippets" class="ad-nav-item" data-view="snippets"><i class="bx bx-code-block"></i><span>Snippets</span><b class="ad-count" data-count="snippets">–</b></a>
+            <a href="#/components" class="ad-nav-item" data-view="components"><i class="bx bx-layer"></i><span>Components</span><b class="ad-count" data-count="components">–</b></a>
 
             <span class="ad-nav-label">INTEGRATIONS</span>
             <a href="#/integrations" class="ad-nav-item" data-view="integrations"><i class="bx bxl-google"></i><span>Google</span><b class="ad-count" data-count="integrations" hidden>0</b></a>

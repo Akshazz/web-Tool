@@ -12,6 +12,36 @@ function makeUserId() {
     return 'u_' . bin2hex(random_bytes(8));
 }
 
+/**
+ * Allowed mastery levels for a skill entry — shared by publicUser() (reading)
+ * and auth.php's update-profile action (writing), so the two can never drift.
+ */
+function profileSkillLevels() {
+    return array('beginner', 'intermediate', 'advanced', 'expert');
+}
+
+/**
+ * Parses the `skills` column's JSON into a clean array of
+ * {name, level} pairs, dropping anything malformed rather than failing —
+ * a hand-edited or half-written row should never break the profile modal.
+ */
+function decodeUserSkills($raw) {
+    if (empty($raw)) { return array(); }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded)) { return array(); }
+    $levels = profileSkillLevels();
+    $clean = array();
+    foreach ($decoded as $s) {
+        if (!is_array($s)) { continue; }
+        $name = isset($s['name']) ? trim((string)$s['name']) : '';
+        if ($name === '') { continue; }
+        $level = isset($s['level']) ? trim((string)$s['level']) : '';
+        if (!in_array($level, $levels, true)) { $level = 'intermediate'; }
+        $clean[] = array('name' => $name, 'level' => $level);
+    }
+    return $clean;
+}
+
 /** Strips the password hash before a user record ever leaves the server. */
 function publicUser($user) {
     if (!is_array($user)) { return null; }
@@ -22,6 +52,12 @@ function publicUser($user) {
         'joinedAt' => isset($user['joined_at']) ? $user['joined_at'] : null,
         'expertiseLevel' => isset($user['expertise_level']) ? $user['expertise_level'] : null,
         'role' => isset($user['role']) ? $user['role'] : 'user',
+        // Optional "About" fields — all blank until the person fills them in
+        // from Edit Profile (see database/profile-details-migration.sql).
+        'bio' => isset($user['bio']) ? $user['bio'] : '',
+        'location' => isset($user['location']) ? $user['location'] : '',
+        'hobbies' => isset($user['hobbies']) ? $user['hobbies'] : '',
+        'skills' => decodeUserSkills(isset($user['skills']) ? $user['skills'] : null),
     );
 }
 
