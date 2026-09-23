@@ -52,4 +52,23 @@ return array(
             'client_secret' => '',
         ),
     ),
+
+    /**
+     * Outgoing mail — currently used only to email the confirmation code
+     * for a password change (see sendPasswordChangeCode() in
+     * core/auth-helpers.php). Sent with PHP's built-in mail() function, so
+     * no extra library is required, but PHP itself needs a way to actually
+     * hand the message off:
+     *   - XAMPP on Windows: install a local relay like Mercury Mail or
+     *     hMailServer, or point [mail function] in php.ini at a real SMTP
+     *     relay (e.g. smtp.gmail.com) via a tool like sendmail.exe/fake
+     *     sendmail — XAMPP does not send real email out of the box.
+     *   - Linux: make sure sendmail/postfix is installed and running.
+     * If mail() fails, the password change is not applied and the person
+     * sees an error telling them to check this configuration.
+     */
+    'mail' => array(
+        'from_email' => 'no-reply@localhost',
+        'from_name'  => 'A-Code Playground',
+    ),
 );
