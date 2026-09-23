@@ -143,8 +143,17 @@ INSERT INTO `snippets` (`id`, `user_id`, `title`, `lang`, `code`, `created_at`, 
 CREATE TABLE `users` (
   `id` varchar(32) NOT NULL,
   `name` varchar(190) NOT NULL,
+  `first_name` varchar(80) DEFAULT NULL,
+  `middle_name` varchar(80) DEFAULT NULL,
+  `last_name` varchar(80) DEFAULT NULL,
+  `username` varchar(30) DEFAULT NULL,
   `email` varchar(190) NOT NULL,
   `password_hash` varchar(255) DEFAULT NULL,
+  `pending_password_hash` varchar(255) DEFAULT NULL,
+  `password_change_code_hash` varchar(64) DEFAULT NULL,
+  `password_change_code_expires` datetime DEFAULT NULL,
+  `password_change_attempts` tinyint(3) unsigned NOT NULL DEFAULT 0,
+  `password_change_requested_at` datetime DEFAULT NULL,
   `oauth_provider` varchar(20) DEFAULT NULL,
   `oauth_id` varchar(190) DEFAULT NULL,
   `expertise_level` enum('beginner','intermediate','professional') DEFAULT NULL,
@@ -152,7 +161,11 @@ CREATE TABLE `users` (
   `role` enum('user','admin') NOT NULL DEFAULT 'user',
   `joined_at` datetime NOT NULL DEFAULT current_timestamp(),
   `bio` varchar(280) DEFAULT NULL,
-  `location` varchar(120) DEFAULT NULL,
+  `location` varchar(255) DEFAULT NULL,
+  `address` varchar(190) DEFAULT NULL,
+  `barangay` varchar(120) DEFAULT NULL,
+  `city` varchar(120) DEFAULT NULL,
+  `country` varchar(80) DEFAULT NULL,
   `hobbies` varchar(255) DEFAULT NULL,
   `skills` text DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -235,7 +248,8 @@ ALTER TABLE `snippets`
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `uniq_users_email` (`email`),
-  ADD UNIQUE KEY `uniq_users_oauth` (`oauth_provider`,`oauth_id`);
+  ADD UNIQUE KEY `uniq_users_oauth` (`oauth_provider`,`oauth_id`),
+  ADD UNIQUE KEY `users_username_unique` (`username`);
 
 --
 -- Indexes for table `xp_ledger`

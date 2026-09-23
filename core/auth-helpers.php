@@ -42,20 +42,68 @@ function decodeUserSkills($raw) {
     return $clean;
 }
 
+/**
+ * Joins the four Address/Barangay/City/Country parts into one
+ * human-readable string ("123 Sample St, Barangay Commonwealth, Quezon
+ * City, Philippines"), skipping any part that's empty. Used both when
+ * saving (so the `location` column stays useful for simple listing/search
+ * without needing to reassemble it) and when reading (so the display
+ * string always matches the four fields, never a stale saved copy).
+ */
+function composeLocation($address, $barangay, $city, $country) {
+    $parts = array();
+    foreach (array($address, $barangay, $city, $country) as $p) {
+        $p = trim((string)$p);
+        if ($p !== '') { $parts[] = $p; }
+    }
+    return implode(', ', $parts);
+}
+
+/**
+ * Joins First/Middle/Last name parts into the one freeform `name` string
+ * every other page (admin dashboard, project/snippet ownership, etc.)
+ * still reads for display — so those pages never need to know the name
+ * is now edited as three separate fields. Blank parts are skipped.
+ */
+function composeFullName($firstName, $middleName, $lastName) {
+    $parts = array();
+    foreach (array($firstName, $middleName, $lastName) as $p) {
+        $p = trim((string)$p);
+        if ($p !== '') { $parts[] = $p; }
+    }
+    return implode(' ', $parts);
+}
+
 /** Strips the password hash before a user record ever leaves the server. */
 function publicUser($user) {
     if (!is_array($user)) { return null; }
+    $address = isset($user['address']) ? $user['address'] : '';
+    $barangay = isset($user['barangay']) ? $user['barangay'] : '';
+    $city = isset($user['city']) ? $user['city'] : '';
+    $country = isset($user['country']) ? $user['country'] : '';
     return array(
         'id' => $user['id'],
         'name' => $user['name'],
+        // First/Middle/Last are the editable breakdown behind `name` (see
+        // database/name-username-migration.sql) — `name` itself stays the
+        // source of truth for every page that only wants one display string.
+        'firstName' => isset($user['first_name']) ? $user['first_name'] : '',
+        'middleName' => isset($user['middle_name']) ? $user['middle_name'] : '',
+        'lastName' => isset($user['last_name']) ? $user['last_name'] : '',
+        'username' => isset($user['username']) ? $user['username'] : '',
         'email' => $user['email'],
         'joinedAt' => isset($user['joined_at']) ? $user['joined_at'] : null,
         'expertiseLevel' => isset($user['expertise_level']) ? $user['expertise_level'] : null,
         'role' => isset($user['role']) ? $user['role'] : 'user',
         // Optional "About" fields — all blank until the person fills them in
-        // from Edit Profile (see database/profile-details-migration.sql).
+        // from Edit Profile (see database/profile-details-migration.sql and
+        // database/profile-address-migration.sql).
         'bio' => isset($user['bio']) ? $user['bio'] : '',
-        'location' => isset($user['location']) ? $user['location'] : '',
+        'address' => $address,
+        'barangay' => $barangay,
+        'city' => $city,
+        'country' => $country,
+        'location' => composeLocation($address, $barangay, $city, $country),
         'hobbies' => isset($user['hobbies']) ? $user['hobbies'] : '',
         'skills' => decodeUserSkills(isset($user['skills']) ? $user['skills'] : null),
     );
@@ -71,6 +119,88 @@ function findUserByEmail($email) {
     $stmt->execute(array(trim((string)$email)));
     $user = $stmt->fetch();
     return $user ? $user : null;
+}
+
+/** Case-insensitive lookup used to enforce the unique-username rule in
+ *  auth.php's update-profile action. Returns null for a blank username
+ *  rather than matching every other blank one. */
+function findUserByUsername($username) {
+    $username = trim((string)$username);
+    if ($username === '') { return null; }
+    $stmt = getDb()->prepare('SELECT * FROM users WHERE username = ? LIMIT 1');
+    $stmt->execute(array($username));
+    $user = $stmt->fetch();
+    return $user ? $user : null;
+}
+
+/**
+ * ---------------------------------------------------------------------
+ * Email-confirmed password change
+ * ---------------------------------------------------------------------
+ * A new password is never written to `password_hash` the moment someone
+ * submits Edit Profile — it's hashed and parked in `pending_password_hash`
+ * until they prove they read a one-time code sent to their registered
+ * email (see database/password-change-email-migration.sql and the
+ * update-profile / confirm-password-change / resend-password-change-code /
+ * cancel-password-change actions in auth.php).
+ */
+
+/** How long an emailed code stays valid before the person needs a new one. */
+function passwordChangeCodeTtlMinutes() {
+    return 10;
+}
+
+/** Reads the 'mail' section of config.php, filling in sane defaults so
+ *  callers never have to null-check it. */
+function acodeplayground_mail_config() {
+    static $cfg = null;
+    if ($cfg !== null) { return $cfg; }
+    $config = require __DIR__ . '/config.php';
+    $mail = (isset($config['mail']) && is_array($config['mail'])) ? $config['mail'] : array();
+    $cfg = array(
+        'from_email' => !empty($mail['from_email']) ? $mail['from_email'] : 'no-reply@localhost',
+        'from_name'  => !empty($mail['from_name']) ? $mail['from_name'] : 'A-Code Playground',
+    );
+    return $cfg;
+}
+
+/** A random 6-digit numeric code — easy to read and type back in on a
+ *  phone, and short-lived enough (see passwordChangeCodeTtlMinutes) that
+ *  the small keyspace isn't a practical concern. */
+function generatePasswordChangeCode() {
+    return str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+}
+
+/** The code itself is never stored — only this hash — so a leaked/backed-up
+ *  database row can't be used to complete someone else's password change. */
+function hashPasswordChangeCode($code) {
+    return hash('sha256', (string)$code);
+}
+
+/** Emails the one-time code. Returns false (without throwing) if PHP's
+ *  mail() couldn't hand the message off — callers turn that into a plain
+ *  "check your mail server settings" error rather than silently pretending
+ *  to have sent it. */
+function sendPasswordChangeCode($toEmail, $toName, $code) {
+    $mailCfg = acodeplayground_mail_config();
+    $subject = 'Your password change confirmation code';
+    $body = "Hi " . ($toName !== '' ? $toName : 'there') . ",\n\n"
+        . "We received a request to change the password on your A-Code Playground account (" . $toEmail . ").\n\n"
+        . "Confirmation code: " . $code . "\n\n"
+        . "Enter this in the app to finish changing your password. It expires in "
+        . passwordChangeCodeTtlMinutes() . " minutes.\n\n"
+        . "If you didn't request this, you can safely ignore this email — your password will not be changed.\n";
+    $headers = "From: " . $mailCfg['from_name'] . " <" . $mailCfg['from_email'] . ">\r\n"
+        . "Content-Type: text/plain; charset=UTF-8\r\n";
+    return @mail($toEmail, $subject, $body, $headers);
+}
+
+/** Wipes any in-progress password change — used on successful
+ *  confirmation, on an expired/over-guessed code, and when the person
+ *  explicitly cancels. */
+function clearPendingPasswordChange($userId) {
+    $stmt = getDb()->prepare('UPDATE users SET pending_password_hash = NULL, password_change_code_hash = NULL, password_change_code_expires = NULL, password_change_attempts = 0, password_change_requested_at = NULL WHERE id = ?');
+    $stmt->execute(array($userId));
 }
 
 function findUserById($id) {

@@ -2400,7 +2400,6 @@ window.snippetCategory=snippetCategory;
     {v:'advanced',label:'Advanced'},
     {v:'expert',label:'Expert'}
   ];
-  function skillLevelLabel(v){return (SKILL_LEVELS.find(l=>l.v===v)||SKILL_LEVELS[1]).label}
   const SKILL_SUGGESTIONS=['JavaScript','PHP','Python','MySQL','HTML5 / CSS3','React','Node.js','Java','TypeScript','C++'];
   const HOBBY_SUGGESTIONS=['Gaming','Reading','Photography','Music','Traveling','Drawing','Hiking','Cooking'];
   const PROFILE_BIO_MAX=280;
@@ -2414,22 +2413,64 @@ window.snippetCategory=snippetCategory;
     if(!code)return '';
     return code.toUpperCase().replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0)));
   }
-  /* `location` is stored server-side as one free-text string ("City,
-     Country") so no schema change was needed to add a proper Country
-     dropdown here — this just splits/joins it at the edges. */
-  function splitLocation(location){
-    const parts=String(location||'').split(',').map(s=>s.trim()).filter(Boolean);
-    if(!parts.length)return {city:'',country:''};
-    const last=parts[parts.length-1];
-    if(COUNTRY_CODES[last])return {city:parts.slice(0,-1).join(', '),country:last};
-    return {city:parts.join(', '),country:''};
-  }
-  function joinLocation(city,country){return [city,country].map(s=>String(s||'').trim()).filter(Boolean).join(', ')}
+  /* `location` now comes pre-composed from the server (see composeLocation()
+     in core/auth-helpers.php) from four discrete columns — address,
+     barangay, city, country — so the edit form binds straight to those
+     instead of guessing them back out of one string. */
   function currentProfile(){
     const p=(typeof window!=='undefined'&&window.CURRENT_USER_PROFILE)?window.CURRENT_USER_PROFILE:{};
-    return {bio:p.bio||'',location:p.location||'',hobbies:p.hobbies||'',skills:Array.isArray(p.skills)?p.skills:[]};
+    return {bio:p.bio||'',address:p.address||'',barangay:p.barangay||'',city:p.city||'',country:p.country||'',location:p.location||'',hobbies:p.hobbies||'',skills:Array.isArray(p.skills)?p.skills:[],firstName:p.firstName||'',middleName:p.middleName||'',lastName:p.lastName||'',username:p.username||''};
   }
-  function hobbyTags(hobbies){return String(hobbies||'').split(',').map(h=>h.trim()).filter(Boolean)}
+
+  /* --- Philippines City / Barangay auto-search --------------------------
+     A starter reference list, not the full PSGC — City covers every
+     province's main cities/municipalities; Barangay is filled in only for
+     a handful of the largest cities. Picking a city outside that handful
+     just leaves Barangay a plain text field (no suggestions), same as any
+     non-Philippines address — nothing here is guessed or invented, it's
+     either a real listed name or the person's own typing. Add more cities
+     to PH_CITIES, or more `'City Name': [...]` entries to PH_BARANGAYS, to
+     extend coverage later. */
+  const PH_CITIES=['Alaminos','Angeles City','Antipolo','Bacolod','Bacoor','Bago','Baguio','Bais','Balanga','Batac','Batangas City','Bayawan','Baybay','Bayugan','Biñan','Bislig','Bogo','Borongan','Butuan','Cabadbaran','Cabanatuan','Cabuyao','Cadiz','Cagayan de Oro','Calamba','Calapan','Calbayog','Caloocan','Candon','Canlaon','Carcar','Catbalogan','Cauayan','Cavite City','Cebu City','Cotabato City','Dagupan','Danao','Dapitan','Davao City','Digos','Dipolog','Dumaguete','El Salvador','Escalante','Gapan','General Santos','General Trias','Gingoog','Guihulngan','Himamaylan','Ilagan','Iligan','Iloilo City','Imus','Iriga','Isabela City','Kabankalan','Kidapawan','Koronadal','Lamitan','Laoag','Lapu-Lapu','Las Piñas','Legazpi','Ligao','Lipa','Lucena','Maasin','Mabalacat','Makati','Malabon','Malaybalay','Malolos','Mandaluyong','Mandaue','Manila','Marawi','Marikina','Masbate City','Mati','Meycauayan','Muntinlupa','Muñoz','Naga','Navotas','Olongapo','Ormoc','Oroquieta','Ozamiz','Pagadian','Palayan','Panabo','Parañaque','Pasay','Pasig','Passi','Puerto Princesa','Quezon City','Roxas','Sagay','Samal','San Carlos','San Fernando','San Jose','San Jose del Monte','San Juan','San Pablo','San Pedro','Santa Rosa','Santiago','Silay','Sipalay','Sorsogon City','Surigao City','Tabaco','Tabuk','Tacloban','Tacurong','Tagaytay','Tagbilaran','Taguig','Tagum','Talisay','Tanauan','Tandag','Tangub','Tanjay','Tarlac City','Tayabas','Toledo','Trece Martires','Tuguegarao','Urdaneta','Valencia','Valenzuela','Victorias','Vigan','Zamboanga City'];
+  const PH_BARANGAYS={
+    'Quezon City':['Alicia','Bagong Pag-asa','Bagong Silangan','Bahay Toro','Batasan Hills','Bayanihan','Blue Ridge A','Blue Ridge B','Central','Commonwealth','Cubao','Diliman','Fairview','Holy Spirit','Kamuning','Kristong Hari','Loyola Heights','Matandang Balara','New Era','North Fairview','Novaliches Proper','Pasong Tamo','Payatas','Project 6','Sacred Heart','San Bartolome','San Roque','Sauyo','Tandang Sora','U.P. Campus','White Plains'],
+    'Manila':['Binondo','Ermita','Intramuros','Malate','Paco','Pandacan','Port Area','Quiapo','Sampaloc','San Andres','San Miguel','San Nicolas','Santa Ana','Santa Cruz','Santa Mesa','Tondo'],
+    'Makati':['Bel-Air','Bangkal','Carmona','Cembo','Dasmariñas','Forbes Park','Guadalupe Nuevo','Guadalupe Viejo','Magallanes','Palanan','Pio del Pilar','Poblacion','San Antonio','San Lorenzo','Urdaneta','Valenzuela'],
+    'Pasig':['Bagong Ilog','Bambang','Caniogan','Kapitolyo','Malinao','Manggahan','Maybunga','Ortigas Center','Pinagbuhatan','Rosario','San Antonio','San Joaquin','Santolan','Ugong'],
+    'Taguig':['Bagumbayan','Bambang','Central Bicutan','Central Signal Village','Fort Bonifacio','Hagonoy','Ibayo-Tipas','Ligid-Tipas','Lower Bicutan','Maharlika Village','New Lower Bicutan','Palingon','Pinagsama','San Miguel','Ususan','Western Bicutan'],
+    'Caloocan':['Bagong Barrio','Bagong Silang','Camarin','Deparo','Grace Park','Kaybiga','Malaria','Maypajo','Novaliches Proper','Sangandaan','Tala'],
+    'Cebu City':['Apas','Banilad','Basak Pardo','Basak San Nicolas','Bulacao','Busay','Capitol Site','Guadalupe','Kamputhaw','Lahug','Lorega San Miguel','Luz','Mabolo','Pahina Central','Pardo','Talamban','Tejero'],
+    'Davao City':['Agdao','Bucana','Buhangin','Bunawan','Calinan','Catalunan Grande','Catalunan Pequeño','Communal','Ma-a','Mandug','Matina Aplaya','Matina Crossing','Poblacion','Sasa','Talomo','Toril']
+  };
+  function attachAutocomplete(inputEl,getList,onPick){
+    if(!inputEl)return null;
+    const wrap=inputEl.closest('.field-group');
+    if(!wrap)return null;
+    const listEl=document.createElement('div');
+    listEl.className='autocomplete-list';
+    listEl.hidden=true;
+    wrap.appendChild(listEl);
+    function render(){
+      const q=inputEl.value.trim().toLowerCase();
+      const source=getList()||[];
+      if(!source.length){listEl.hidden=true;listEl.innerHTML='';return}
+      const matches=(q?source.filter(s=>s.toLowerCase().includes(q)):source).slice(0,8);
+      if(!matches.length){listEl.hidden=true;listEl.innerHTML='';return}
+      listEl.innerHTML=matches.map(s=>`<button type="button" class="autocomplete-item">${escapeHtml(s)}</button>`).join('');
+      listEl.hidden=false;
+      $$('.autocomplete-item',listEl).forEach((btn,i)=>btn.addEventListener('mousedown',e=>{
+        e.preventDefault();
+        inputEl.value=matches[i];
+        listEl.hidden=true;
+        if(onPick)onPick(matches[i]);
+        inputEl.dispatchEvent(new Event('input',{bubbles:true}));
+      }));
+    }
+    inputEl.addEventListener('input',render);
+    inputEl.addEventListener('focus',render);
+    inputEl.addEventListener('blur',()=>setTimeout(()=>{listEl.hidden=true},120));
+    return {refresh:render};
+  }
 
 
   /* --- View Profile modal (account dropdown) ----------------------------
@@ -2437,6 +2478,12 @@ window.snippetCategory=snippetCategory;
      optional About section (bio/location/hobbies/skills) when filled in —
      with an "Edit Profile" action inside that swaps in the actual edit
      form below, so people see their account before jumping into editing it. */
+  /* --- Profile modal (account dropdown) -----------------------------------
+     One combined modal: the read-only summary (avatar/rank/XP/stats/join
+     date) sits in a compact header row, and every editable field — Name,
+     Email, password, and the optional About section — is right below it,
+     already in edit mode. There's no separate "View" step and no second
+     modal to open; Save Changes (or Close) is the only way out. */
   function viewProfileForm(){
     const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
     const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
@@ -2446,67 +2493,77 @@ window.snippetCategory=snippetCategory;
     const joinedLabel=(joined&&!isNaN(joined))?joined.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}):'—';
     const counts={projects:store.get('projects').length,snippets:store.get('snippets').filter(x=>snippetSource(x)==='snippet').length,components:store.get('snippets').filter(x=>snippetSource(x)==='component').length,notes:store.get('notes').length};
     const profile=currentProfile();
-    const hobbies=hobbyTags(profile.hobbies);
-    const hasAbout=profile.bio||profile.location||hobbies.length||profile.skills.length;
-    const aboutHtml=!hasAbout?'':`<div class="profile-view-about">
-        ${profile.bio?`<p class="profile-view-bio">${escapeHtml(profile.bio)}</p>`:''}
-        ${profile.location?(()=>{const loc=splitLocation(profile.location),flag=countryFlag(loc.country);return `<p class="muted profile-view-location">${flag?`<span class="location-flag">${flag}</span>`:'<i class="bx bx-map"></i>'} ${escapeHtml(profile.location)}</p>`})():''}
-        ${hobbies.length?`<div class="profile-view-section"><span class="profile-view-label">Hobbies</span><div class="profile-tag-row">${hobbies.map(h=>`<span class="hobby-chip">${escapeHtml(h)}</span>`).join('')}</div></div>`:''}
-        ${profile.skills.length?`<div class="profile-view-section"><span class="profile-view-label">Skills</span><div class="profile-tag-row">${profile.skills.map(sk=>`<span class="skill-chip skill-level-${escapeAttr(sk.level)}">${escapeHtml(sk.name)}<em>${escapeHtml(skillLevelLabel(sk.level))}</em></span>`).join('')}</div></div>`:''}
-      </div>`;
-    openModal(`<div class="profile-view">
-      <div class="profile-view-avatar account-avatar-ring ${rank.cls}"><span class="account-avatar-initial">${escapeHtml(initial)}</span><span class="account-avatar-badge"><i class="bx ${rank.icon}"></i></span></div>
-      <h2 class="profile-view-name">${escapeHtml(curName)}</h2>
-      <p class="muted profile-view-email">${escapeHtml(curEmail)}</p>
-      <div class="account-rank-row profile-view-rank"><i class="bx ${rank.icon}"></i> <b>${escapeHtml(rank.tierLabel)}</b> ${rankSubBadge(rank)} <span class="muted">· ${s.total} XP</span></div>
-      <div class="xp-bar"><div class="xp-bar-fill" style="width:${prog.pct}%"></div></div>
-      <div class="xp-bar-label">${prog.next?(prog.toNext+' XP to '+escapeHtml(prog.next.label)):'Max rank reached'}</div>
-      <div class="profile-stats">
-        <div class="profile-stat"><strong>${counts.projects}</strong><span>Projects</span></div>
-        <div class="profile-stat"><strong>${counts.snippets}</strong><span>Snippets</span></div>
-        <div class="profile-stat"><strong>${counts.components}</strong><span>Components</span></div>
-        <div class="profile-stat"><strong>${counts.notes}</strong><span>Notes</span></div>
-      </div>
-      <p class="muted profile-view-joined"><i class="bx bx-calendar"></i> Member since ${escapeHtml(joinedLabel)}</p>
-      ${aboutHtml}
-      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Close</button><button class="primary-btn" id="goEditProfileBtn"><i class="bx bx-pencil"></i> Edit Profile</button></div>
-    </div>`,'modal-profile');
-    const goEditBtn=$('#goEditProfileBtn');
-    if(goEditBtn)goEditBtn.onclick=()=>editProfileForm();
-  }
-
-  /* --- Edit Profile modal (opened from View Profile) ---------------------
-     Name/email/password stay exactly as before; everything under "About
-     you (optional)" is new and never blocks saving when left blank. */
-  function editProfileForm(){
-    const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
-    const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
-    const profile=currentProfile();
     const bioLen=(profile.bio||'').length;
-    const loc=splitLocation(profile.location);
-    openModal(`<h2>Edit Profile</h2><p class="modal-subtitle">Update your account name, email, or password.</p>
-      <label>Name<div class="field-group"><i class="bx bx-user field-icon"></i><input id="epName" class="input has-icon" value="${escapeAttr(curName)}" placeholder="Your name"></div></label>
-      <label>Email<div class="field-group"><i class="bx bx-envelope field-icon"></i><input id="epEmail" class="input has-icon" type="email" value="${escapeAttr(curEmail)}" placeholder="you@example.com"></div></label>
-      <p class="muted" style="margin:0 0 8px">Leave the password fields blank to keep your current password.</p>
-      <label>Current password<div class="field-group"><i class="bx bx-lock-alt field-icon"></i><input id="epCurPass" class="input has-icon" type="password" placeholder="Only needed to change your password" autocomplete="current-password"></div></label>
-      <label>New password<div class="field-group"><i class="bx bx-lock field-icon"></i><input id="epNewPass" class="input has-icon" type="password" placeholder="At least 6 characters" autocomplete="new-password"></div></label>
-      <div class="modal-section-divider"><span>About you <em>(optional)</em></span></div>
-      <label>Bio<div class="field-group field-textarea-wrap"><i class="bx bx-message-square-detail field-icon field-icon-top"></i><textarea id="epBio" class="input has-icon" rows="3" maxlength="${PROFILE_BIO_MAX}" placeholder="A short line about yourself">${escapeHtml(profile.bio)}</textarea><span class="field-char-count" id="epBioCount">${bioLen}/${PROFILE_BIO_MAX}</span></div></label>
-      <div class="form-grid">
-        <label>City<div class="field-group"><i class="bx bx-map-pin field-icon"></i><input id="epCity" class="input has-icon" value="${escapeAttr(loc.city)}" placeholder="e.g. Quezon City"></div></label>
-        <label>Country<div class="field-group field-select-wrap"><i class="bx bx-flag field-icon"></i><select id="epCountry" class="input has-icon"><option value="">Select country…</option>${COUNTRIES.map(c=>`<option value="${escapeAttr(c)}"${c===loc.country?' selected':''}>${countryFlag(c)} ${escapeHtml(c)}</option>`).join('')}</select></div></label>
+    // Older accounts (migrated before First/Middle/Last existed) may not
+    // have those fields saved yet — fall back to a best-effort split of
+    // the current display name so the form isn't blank the first time.
+    const nameFallback=(profile.firstName||profile.lastName)?['','']:curName.trim().split(/\s+/).filter(Boolean);
+    const fbFirst=nameFallback[0]||'',fbLast=nameFallback.slice(1).join(' ');
+
+    openModal(`<div class="profile-header">
+        <div class="profile-view-avatar account-avatar-ring ${rank.cls}"><span class="account-avatar-initial">${escapeHtml(initial)}</span><span class="account-avatar-badge"><i class="bx ${rank.icon}"></i></span></div>
+        <div class="profile-header-info">
+          <h2 class="profile-view-name">${escapeHtml(curName)}</h2>
+          <p class="muted profile-view-email">${escapeHtml(curEmail)}</p>
+          <div class="account-rank-row profile-view-rank"><i class="bx ${rank.icon}"></i> <b>${escapeHtml(rank.tierLabel)}</b> ${rankSubBadge(rank)} <span class="muted">· ${s.total} XP</span></div>
+          <div class="xp-bar"><div class="xp-bar-fill" style="width:${prog.pct}%"></div></div>
+          <div class="xp-bar-label">${prog.next?(prog.toNext+' XP to '+escapeHtml(prog.next.label)):'Max rank reached'} · Member since ${escapeHtml(joinedLabel)}</div>
+        </div>
+        <div class="profile-header-stats">
+          <div class="profile-stat"><strong>${counts.projects}</strong><span>Projects</span></div>
+          <div class="profile-stat"><strong>${counts.snippets}</strong><span>Snippets</span></div>
+          <div class="profile-stat"><strong>${counts.components}</strong><span>Components</span></div>
+          <div class="profile-stat"><strong>${counts.notes}</strong><span>Notes</span></div>
+        </div>
       </div>
+      <div class="modal-section-divider"><span>Account</span></div>
+      <div class="form-grid-3">
+        <label>First name<div class="field-group"><i class="bx bx-user field-icon"></i><input id="epFirstName" class="input has-icon" value="${escapeAttr(profile.firstName||fbFirst)}" placeholder="First name"></div></label>
+        <label>Middle name<span class="muted"> (optional)</span><div class="field-group"><i class="bx bx-user field-icon"></i><input id="epMiddleName" class="input has-icon" value="${escapeAttr(profile.middleName)}" placeholder="Middle name"></div></label>
+        <label>Last name<div class="field-group"><i class="bx bx-user field-icon"></i><input id="epLastName" class="input has-icon" value="${escapeAttr(profile.lastName||fbLast)}" placeholder="Last name"></div></label>
+      </div>
+      <div class="form-grid">
+        <label>Username<div class="field-group"><i class="bx bx-at field-icon"></i><input id="epUsername" class="input has-icon" autocomplete="off" value="${escapeAttr(profile.username)}" placeholder="e.g. juan_delacruz"></div></label>
+        <label>Email<span class="muted"> (can't be changed)</span><div class="field-group"><i class="bx bx-envelope field-icon"></i><input id="epEmail" class="input has-icon" type="email" value="${escapeAttr(curEmail)}" disabled readonly></div></label>
+      </div>
+      <div class="form-grid">
+        <label>Current password<div class="field-group"><i class="bx bx-lock-alt field-icon"></i><input id="epCurPass" class="input has-icon" type="password" placeholder="Only to change password" autocomplete="current-password"></div></label>
+        <label>New password<div class="field-group"><i class="bx bx-lock field-icon"></i><input id="epNewPass" class="input has-icon" type="password" placeholder="At least 6 characters" autocomplete="new-password"></div></label>
+      </div>
+      <div class="modal-section-divider"><span>About you <em>(optional)</em></span></div>
+      <label>Bio<div class="field-group field-textarea-wrap"><i class="bx bx-message-square-detail field-icon field-icon-top"></i><textarea id="epBio" class="input has-icon" rows="2" maxlength="${PROFILE_BIO_MAX}" placeholder="A short line about yourself">${escapeHtml(profile.bio)}</textarea><span class="field-char-count" id="epBioCount">${bioLen}/${PROFILE_BIO_MAX}</span></div></label>
+      <div class="form-grid">
+        <label>Country<div class="field-group field-select-wrap"><i class="bx bx-flag field-icon"></i><select id="epCountry" class="input has-icon"><option value="">Select country…</option>${COUNTRIES.map(c=>`<option value="${escapeAttr(c)}"${c===profile.country?' selected':''}>${countryFlag(c)} ${escapeHtml(c)}</option>`).join('')}</select></div></label>
+        <label>City<span class="muted"> (type to search)</span><div class="field-group"><i class="bx bx-map-pin field-icon"></i><input id="epCity" class="input has-icon" autocomplete="off" value="${escapeAttr(profile.city)}" placeholder="e.g. Quezon City"></div></label>
+      </div>
+      <label id="epBarangayLabel" style="display:none">Barangay<span class="muted"> (type to search)</span><div class="field-group"><i class="bx bx-buildings field-icon"></i><input id="epBarangay" class="input has-icon" autocomplete="off" value="${escapeAttr(profile.barangay)}" placeholder="e.g. Commonwealth"></div></label>
+      <label>Address<div class="field-group"><i class="bx bx-home-alt field-icon"></i><input id="epAddress" class="input has-icon" value="${escapeAttr(profile.address)}" placeholder="House/unit no., street, subdivision"></div></label>
       <label>Hobbies<div class="field-group"><i class="bx bx-heart field-icon"></i><input id="epHobbies" class="input has-icon" autocomplete="off" value="${escapeAttr(profile.hobbies)}" placeholder="Gaming, Reading, Photography"></div></label>
       <div class="tech-suggest" id="hobbySuggest">${HOBBY_SUGGESTIONS.map(h=>`<button type="button" class="tech-chip" data-hobby="${escapeAttr(h)}">${escapeHtml(h)}</button>`).join('')}</div>
-      <label style="margin-top:12px">Skills &amp; mastery<span class="muted" style="font-weight:500"> — languages, frameworks, tools you know</span></label>
+      <label style="margin-top:10px">Skills &amp; mastery<span class="muted"> — languages, frameworks, tools you know</span></label>
       <div class="tech-suggest" id="skillSuggest">${SKILL_SUGGESTIONS.map(s=>`<button type="button" class="tech-chip" data-skill="${escapeAttr(s)}">${escapeHtml(s)}</button>`).join('')}</div>
       <div id="skillRows" class="skill-rows"></div>
-      <button type="button" class="ghost-btn" id="addSkillRowBtn" style="margin:4px 0 10px"><i class="bx bx-plus"></i> Add skill</button>
-      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`,'modal-profile');
+      <button type="button" class="ghost-btn" id="addSkillRowBtn" style="margin:4px 0 4px"><i class="bx bx-plus"></i> Add skill</button>
+      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Close</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`,'modal-profile');
 
     /* Bio char counter */
     const bioEl=$('#epBio'),bioCountEl=$('#epBioCount');
     bioEl?.addEventListener('input',()=>{if(bioCountEl)bioCountEl.textContent=bioEl.value.length+'/'+PROFILE_BIO_MAX});
+
+    /* Country / City / Barangay: Barangay only makes sense for the
+       Philippines, so it's hidden until that's the selected country. City
+       and Barangay both get the auto-search dropdown from PH_CITIES /
+       PH_BARANGAYS, filtered live as the person types (see
+       attachAutocomplete above) — for any other country, or a city with no
+       barangay list on file, they're just plain text fields. */
+    const countryEl=$('#epCountry'),cityEl=$('#epCity'),barangayLabelEl=$('#epBarangayLabel'),barangayEl=$('#epBarangay');
+    function isPH(){return countryEl.value==='Philippines'}
+    function syncBarangayVisibility(){if(barangayLabelEl)barangayLabelEl.style.display=isPH()?'':'none'}
+    syncBarangayVisibility();
+    const cityAC=attachAutocomplete(cityEl,()=>isPH()?PH_CITIES:[]);
+    const barangayAC=attachAutocomplete(barangayEl,()=>isPH()?(PH_BARANGAYS[cityEl.value.trim()]||[]):[]);
+    countryEl?.addEventListener('change',()=>{syncBarangayVisibility();cityAC?.refresh();barangayAC?.refresh()});
+    cityEl?.addEventListener('input',()=>barangayAC?.refresh());
 
     /* Hobbies: same comma-separated-input + quick-pick-chip pattern used for
        a project's Technology field, so toggling a suggestion adds/removes
@@ -2551,29 +2608,96 @@ window.snippetCategory=snippetCategory;
 
     const saveBtn=$('#saveProfileBtn');
     saveBtn.onclick=()=>{
-      const name=$('#epName').value.trim(),email=$('#epEmail').value.trim();
+      const firstName=$('#epFirstName').value.trim(),middleName=$('#epMiddleName').value.trim(),lastName=$('#epLastName').value.trim();
+      const username=$('#epUsername').value.trim();
       const currentPassword=$('#epCurPass').value,newPassword=$('#epNewPass').value;
-      const bio=bioEl.value.trim(),location=joinLocation($('#epCity').value,$('#epCountry').value),hobbies=hobbiesEl.value.trim();
+      const bio=bioEl.value.trim(),hobbies=hobbiesEl.value.trim();
+      const country=countryEl.value.trim(),city=cityEl.value.trim();
+      const barangay=isPH()?barangayEl.value.trim():'';
+      const address=$('#epAddress').value.trim();
       const cleanSkills=skills.map(s=>({name:s.name.trim(),level:s.level})).filter(s=>s.name);
-      if(!name||!email){toast('Name and email cannot be empty.');return}
+      if(!firstName||!lastName){toast('First name and last name cannot be empty.');return}
       if(newPassword&&newPassword.length<6){toast('New password needs to be at least 6 characters.');return}
       if(newPassword&&!currentPassword){toast('Enter your current password to set a new one.');return}
       saveBtn.disabled=true;saveBtn.innerHTML='<i class="bx bx-loader-alt bx-spin"></i> Saving...';
-      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update-profile',name,email,currentPassword,newPassword,bio,location,hobbies,skills:cleanSkills,csrf:CSRF_TOKEN})})
+      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update-profile',firstName,middleName,lastName,username,currentPassword,newPassword,bio,address,barangay,city,country,hobbies,skills:cleanSkills,csrf:CSRF_TOKEN})})
         .then(r=>r.json())
         .then(res=>{
           if(res&&res.ok){
             if(nameEl)nameEl.textContent=res.user.name;
             if(emailEl)emailEl.textContent=res.user.email;
-            window.CURRENT_USER_PROFILE={bio:res.user.bio||'',location:res.user.location||'',hobbies:res.user.hobbies||'',skills:Array.isArray(res.user.skills)?res.user.skills:[]};
-            closeModal();
-            toast('Profile updated');
+            window.CURRENT_USER_PROFILE={bio:res.user.bio||'',address:res.user.address||'',barangay:res.user.barangay||'',city:res.user.city||'',country:res.user.country||'',location:res.user.location||'',hobbies:res.user.hobbies||'',skills:Array.isArray(res.user.skills)?res.user.skills:[],firstName:res.user.firstName||'',middleName:res.user.middleName||'',lastName:res.user.lastName||'',username:res.user.username||''};
+            if(res.passwordChangePending){
+              saveBtn.disabled=false;saveBtn.innerHTML='<i class="bx bx-save"></i> Save Changes';
+              toast('Profile updated. Check your email for a confirmation code.');
+              promptPasswordChangeCode();
+            }else{
+              closeModal();
+              toast(res.passwordChangeError?('Profile updated — '+res.passwordChangeError):'Profile updated');
+            }
           }else{
             saveBtn.disabled=false;saveBtn.innerHTML='<i class="bx bx-save"></i> Save Changes';
             toast((res&&res.error)||'Could not update profile — try again.');
           }
         })
         .catch(()=>{saveBtn.disabled=false;saveBtn.innerHTML='<i class="bx bx-save"></i> Save Changes';toast('Could not reach the server — try again.')});
+    };
+  }
+
+  /* --- Password-change email confirmation ---------------------------------
+     Step 2 of changing a password from Edit Profile: update-profile parks
+     the new (hashed) password server-side and emails a 6-digit code instead
+     of applying it right away. This small modal collects that code and
+     calls confirm-password-change — with Resend / Cancel for the two
+     obvious things to go wrong (email didn't arrive, or changed their
+     mind). See the matching actions in auth.php. */
+  function promptPasswordChangeCode(){
+    openModal(`<h2><i class="bx bx-mail-send"></i> Confirm password change</h2>
+      <p class="modal-subtitle">We emailed a 6-digit code to your registered address. Enter it below to finish changing your password.</p>
+      <div class="form-grid"><label class="full">Confirmation code<div class="field-group"><i class="bx bx-shield-quarter field-icon"></i><input id="pwCode" class="input has-icon" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456"></div></label></div>
+      <div class="modal-footer" style="justify-content:space-between">
+        <button type="button" class="ghost-btn" id="pwCancelBtn"><i class="bx bx-x"></i> Cancel</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="ghost-btn" id="pwResendBtn"><i class="bx bx-refresh"></i> Resend code</button>
+          <button type="button" class="primary-btn" id="pwConfirmBtn"><i class="bx bx-check"></i> Confirm</button>
+        </div>
+      </div>`,'modal-compact');
+
+    const codeEl=$('#pwCode'),confirmBtn=$('#pwConfirmBtn'),resendBtn=$('#pwResendBtn'),cancelBtn=$('#pwCancelBtn');
+    codeEl?.addEventListener('keydown',e=>{if(e.key==='Enter')confirmBtn.click()});
+
+    cancelBtn.onclick=()=>{
+      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cancel-password-change',csrf:CSRF_TOKEN})}).catch(()=>{});
+      closeModal();
+    };
+
+    resendBtn.onclick=()=>{
+      resendBtn.disabled=true;resendBtn.innerHTML='<i class="bx bx-loader-alt bx-spin"></i> Sending...';
+      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'resend-password-change-code',csrf:CSRF_TOKEN})})
+        .then(r=>r.json())
+        .then(res=>{
+          resendBtn.disabled=false;resendBtn.innerHTML='<i class="bx bx-refresh"></i> Resend code';
+          toast(res&&res.ok?'A new code has been sent.':((res&&res.error)||'Could not resend the code.'));
+        })
+        .catch(()=>{resendBtn.disabled=false;resendBtn.innerHTML='<i class="bx bx-refresh"></i> Resend code';toast('Could not reach the server — try again.')});
+    };
+
+    confirmBtn.onclick=()=>{
+      const code=(codeEl.value||'').trim();
+      if(!code){toast('Enter the code we emailed you.');return}
+      confirmBtn.disabled=true;confirmBtn.innerHTML='<i class="bx bx-loader-alt bx-spin"></i> Confirming...';
+      fetch('auth.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'confirm-password-change',code,csrf:CSRF_TOKEN})})
+        .then(r=>r.json())
+        .then(res=>{
+          if(res&&res.ok){
+            closeModal();
+            toast('Password changed.');
+          }else{
+            confirmBtn.disabled=false;confirmBtn.innerHTML='<i class="bx bx-check"></i> Confirm';
+            toast((res&&res.error)||'Could not confirm the code — try again.');
+          }
+        })
+        .catch(()=>{confirmBtn.disabled=false;confirmBtn.innerHTML='<i class="bx bx-check"></i> Confirm';toast('Could not reach the server — try again.')});
     };
   }
 
