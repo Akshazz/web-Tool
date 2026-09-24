@@ -101,8 +101,29 @@ function downloadBackupFile(){
   a.href=url;a.download='a-codeplayground-backup-'+ts+'.json';
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  toast('Backup file downloading — pick Desktop or any folder to save it');
+  toast(isPhoneLike()?'Backup file saved — find it in your Downloads or the Files app':'Backup file downloading — pick Desktop or any folder to save it');
 }
+function isPhoneLike(){return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')||(window.matchMedia&&matchMedia('(pointer:coarse)').matches&&window.innerWidth<900)}
+/* Share sheet backup (Android + iOS): hands the JSON file to the phone's own share sheet so it can
+   go to Files / iCloud Drive / Google Drive / any app. Needs a secure context (https or localhost),
+   so the button only appears when the browser can actually share files. */
+function backupFileForShare(){
+  const ts=new Date().toISOString().replace(/[:.]/g,'-');
+  return new File([JSON.stringify(collectSnapshot(),null,2)],'a-codeplayground-backup-'+ts+'.json',{type:'application/json'});
+}
+function shareBackupFile(){
+  let file;try{file=backupFileForShare()}catch(e){downloadBackupFile();return}
+  navigator.share({files:[file],title:'A-Code Playground backup'})
+    .then(()=>toast('Backup shared'))
+    .catch(err=>{if(err&&err.name==='AbortError')return;downloadBackupFile()});
+}
+(function(){
+  const btn=document.getElementById('shareBackupBtn');
+  if(!btn)return;
+  try{
+    if(navigator.share&&navigator.canShare&&navigator.canShare({files:[new File(['{}'],'t.json',{type:'application/json'})]})){btn.hidden=false;btn.addEventListener('click',shareBackupFile)}
+  }catch(e){}
+})();
 function applyImportedSnapshot(snapshot,mode){
   const clean=k=>Array.isArray(snapshot[k])?snapshot[k]:[];
   if(mode==='merge'){
@@ -342,9 +363,54 @@ function applyCodeMirrorTheme(){
   if(activeNoteCm){activeNoteCm.setOption('theme',name);activeNoteCm.refresh()}
 }
 function setTheme(dark){document.body.classList.toggle('dark',!!dark);localStorage.setItem('theme',dark?'dark':'light');const c=$('#darkSetting');if(c)c.checked=!!dark;const ti=$('#themeToggle')?.querySelector('.bx');if(ti)ti.className='bx '+(dark?'bx-sun':'bx-moon');const tl=$('#themeToggleLabel');if(tl)tl.textContent=dark?'Light mode':'Dark mode';applyCodeMirrorTheme()}
-$('#themeToggle')?.addEventListener('click',()=>setTheme(!document.body.classList.contains('dark')));
-setTheme(localStorage.getItem('theme')==='dark');
-$('#darkSetting')?.addEventListener('change',e=>setTheme(e.target.checked));
+/* Appearance preferences (Settings > Appearance): theme mode (light / dark / system),
+   code editor text size and reduced motion. All stored per browser and applied on every page.
+   'theme' keeps holding the resolved light/dark value because other pages read it. */
+const THEME_MQ=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+const EDITOR_SIZES=['11.5','12.5','14','16'];
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function getThemeMode(){const m=lsGet('themeMode');return(m==='light'||m==='dark'||m==='system')?m:(lsGet('theme')==='dark'?'dark':'light')}
+function getEditorSize(){const v=lsGet('editorFontSize');return EDITOR_SIZES.indexOf(v)>-1?v:'12.5'}
+function refreshEditors(){document.querySelectorAll('.CodeMirror').forEach(el=>{if(el.CodeMirror)el.CodeMirror.refresh()})}
+function syncAppearanceUI(){
+  const mode=getThemeMode(),size=getEditorSize();
+  document.querySelectorAll('.theme-choice').forEach(b=>b.setAttribute('aria-checked',b.dataset.themeMode===mode?'true':'false'));
+  document.querySelectorAll('[data-editor-size]').forEach(b=>b.setAttribute('aria-checked',b.dataset.editorSize===size?'true':'false'));
+  const rm=document.getElementById('reduceMotionSetting');if(rm)rm.checked=document.body.classList.contains('reduce-motion');
+}
+function setThemeMode(mode){
+  if(mode!=='light'&&mode!=='dark'&&mode!=='system')mode='light';
+  lsSet('themeMode',mode);
+  setTheme(mode==='system'?!!(THEME_MQ&&THEME_MQ.matches):mode==='dark');
+  syncAppearanceUI();
+}
+function setEditorSize(size){
+  if(EDITOR_SIZES.indexOf(size)<0)size='12.5';
+  lsSet('editorFontSize',size);
+  document.documentElement.style.setProperty('--editor-fs',size+'px');
+  syncAppearanceUI();refreshEditors();
+}
+function setReduceMotion(on){
+  lsSet('reduceMotion',on?'1':'0');
+  document.body.classList.toggle('reduce-motion',!!on);
+  syncAppearanceUI();
+}
+function resetAppearance(){
+  setThemeMode('light');setEditorSize('12.5');
+  try{localStorage.removeItem('reduceMotion')}catch(e){}
+  document.body.classList.remove('reduce-motion');syncAppearanceUI();
+}
+$('#themeToggle')?.addEventListener('click',()=>setThemeMode(document.body.classList.contains('dark')?'light':'dark'));
+if(THEME_MQ){const onSys=()=>{if(getThemeMode()==='system')setTheme(THEME_MQ.matches)};THEME_MQ.addEventListener?THEME_MQ.addEventListener('change',onSys):THEME_MQ.addListener&&THEME_MQ.addListener(onSys)}
+setThemeMode(getThemeMode());
+document.documentElement.style.setProperty('--editor-fs',getEditorSize()+'px');
+if(lsGet('reduceMotion')==='1')document.body.classList.add('reduce-motion');
+syncAppearanceUI();
+document.querySelectorAll('.theme-choice').forEach(b=>b.addEventListener('click',()=>setThemeMode(b.dataset.themeMode)));
+document.querySelectorAll('[data-editor-size]').forEach(b=>b.addEventListener('click',()=>setEditorSize(b.dataset.editorSize)));
+document.getElementById('reduceMotionSetting')?.addEventListener('change',e=>setReduceMotion(e.target.checked));
+document.getElementById('resetAppearanceBtn')?.addEventListener('click',()=>{resetAppearance();toast('Appearance reset to defaults')});
 /* Small red dot on the bell showing there's activity the person hasn't
    opened the popover to see yet. "Seen" is tracked as how many activity
    entries existed the last time they opened it (per-browser, like the
@@ -370,7 +436,7 @@ if(notifBtn&&notifDropdown){
 updateNotifDot();
 const modal=$('#modal'),modalBody=$('#modalBody');
 function openModal(html,extraClass){if(!modal)return;modalBody.innerHTML=html;const box=modal.querySelector('.modal');if(box){box.classList.remove('modal-compact','modal-profile');if(extraClass)box.classList.add(extraClass)}modal.classList.add('show');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');modalBody.querySelectorAll('.code-mini-editor.active').forEach(mountCodeEditor);setTimeout(()=>{const first=modal.querySelector('input,textarea,select,button:not(.modal-close)');first?.focus()},30)}
-function closeModal(){if(!modal)return;modal.classList.remove('show');modal.setAttribute('aria-hidden','true');document.body.classList.remove('modal-open');activeNoteCm=null;if(activeDropdownClose){activeDropdownClose();activeDropdownClose=null}}
+function closeModal(){if(!modal)return;modal.classList.remove('show');modal.setAttribute('aria-hidden','true');if(!document.querySelector('#settingsModal.show'))document.body.classList.remove('modal-open');activeNoteCm=null;if(activeDropdownClose){activeDropdownClose();activeDropdownClose=null}}
 /* Exposed globally: the first-run experience picker and tour live in a separate
    script block later in the file and call these by name. */
 window.openModal=openModal;
@@ -1458,6 +1524,7 @@ function renderPoints(){
   document.querySelectorAll('#dashXpLabel').forEach(function(el){el.textContent=dashSubText});
   renderStreakWeek();
   renderXpLeaderboard();
+  if(typeof window.renderSettingsAccount==='function')window.renderSettingsAccount();
 }
 /* Dashboard "Leaderboard" panel: top 10 accounts by lifetime XP, plus a
    "you" summary row (your own rank/total, which may not appear in that
@@ -2485,13 +2552,10 @@ window.snippetCategory=snippetCategory;
      already in edit mode. There's no separate "View" step and no second
      modal to open; Save Changes (or Close) is the only way out. */
   function viewProfileForm(){
+    const host=$('#settingsAccountBody');
+    if(!host)return;
     const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
     const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
-    const initial=curName?curName.trim().charAt(0).toUpperCase():'?';
-    const s=getPointsState(),rank=getRank(s.total),prog=getRankProgress(s.total);
-    const joined=window.CURRENT_USER_JOINED_AT?new Date(String(window.CURRENT_USER_JOINED_AT).replace(' ','T')):null;
-    const joinedLabel=(joined&&!isNaN(joined))?joined.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}):'—';
-    const counts={projects:store.get('projects').length,snippets:store.get('snippets').filter(x=>snippetSource(x)==='snippet').length,components:store.get('snippets').filter(x=>snippetSource(x)==='component').length,notes:store.get('notes').length};
     const profile=currentProfile();
     const bioLen=(profile.bio||'').length;
     // Older accounts (migrated before First/Middle/Last existed) may not
@@ -2500,22 +2564,10 @@ window.snippetCategory=snippetCategory;
     const nameFallback=(profile.firstName||profile.lastName)?['','']:curName.trim().split(/\s+/).filter(Boolean);
     const fbFirst=nameFallback[0]||'',fbLast=nameFallback.slice(1).join(' ');
 
-    openModal(`<div class="profile-header">
-        <div class="profile-view-avatar account-avatar-ring ${rank.cls}"><span class="account-avatar-initial">${escapeHtml(initial)}</span><span class="account-avatar-badge"><i class="bx ${rank.icon}"></i></span></div>
-        <div class="profile-header-info">
-          <h2 class="profile-view-name">${escapeHtml(curName)}</h2>
-          <p class="muted profile-view-email">${escapeHtml(curEmail)}</p>
-          <div class="account-rank-row profile-view-rank"><i class="bx ${rank.icon}"></i> <b>${escapeHtml(rank.tierLabel)}</b> ${rankSubBadge(rank)} <span class="muted">· ${s.total} XP</span></div>
-          <div class="xp-bar"><div class="xp-bar-fill" style="width:${prog.pct}%"></div></div>
-          <div class="xp-bar-label">${prog.next?(prog.toNext+' XP to '+escapeHtml(prog.next.label)):'Max rank reached'} · Member since ${escapeHtml(joinedLabel)}</div>
-        </div>
-        <div class="profile-header-stats">
-          <div class="profile-stat"><strong>${counts.projects}</strong><span>Projects</span></div>
-          <div class="profile-stat"><strong>${counts.snippets}</strong><span>Snippets</span></div>
-          <div class="profile-stat"><strong>${counts.components}</strong><span>Components</span></div>
-          <div class="profile-stat"><strong>${counts.notes}</strong><span>Notes</span></div>
-        </div>
-      </div>
+    /* Edit mode happens right inside the Settings > Account pane (no second modal): the same
+       summary header stays on top and the whole pane turns into the form. */
+    host.classList.add('editing');
+    host.innerHTML=`${settingsAccountHeadHtml()}
       <div class="modal-section-divider"><span>Account</span></div>
       <div class="form-grid-3">
         <label>First name<div class="field-group"><i class="bx bx-user field-icon"></i><input id="epFirstName" class="input has-icon" value="${escapeAttr(profile.firstName||fbFirst)}" placeholder="First name"></div></label>
@@ -2544,7 +2596,9 @@ window.snippetCategory=snippetCategory;
       <div class="tech-suggest" id="skillSuggest">${SKILL_SUGGESTIONS.map(s=>`<button type="button" class="tech-chip" data-skill="${escapeAttr(s)}">${escapeHtml(s)}</button>`).join('')}</div>
       <div id="skillRows" class="skill-rows"></div>
       <button type="button" class="ghost-btn" id="addSkillRowBtn" style="margin:4px 0 4px"><i class="bx bx-plus"></i> Add skill</button>
-      <div class="modal-footer"><button class="ghost-btn" data-close-modal><i class="bx bx-x"></i> Close</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`,'modal-profile');
+      <div class="modal-footer settings-edit-footer"><button type="button" class="ghost-btn" id="epCancelBtn"><i class="bx bx-x"></i> Cancel</button><button class="primary-btn" id="saveProfileBtn"><i class="bx bx-save"></i> Save Changes</button></div>`;
+    $('#epCancelBtn')?.addEventListener('click',()=>renderSettingsAccount(true));
+    $('#epFirstName')?.focus();
 
     /* Bio char counter */
     const bioEl=$('#epBio'),bioCountEl=$('#epBioCount');
@@ -2627,12 +2681,12 @@ window.snippetCategory=snippetCategory;
             if(nameEl)nameEl.textContent=res.user.name;
             if(emailEl)emailEl.textContent=res.user.email;
             window.CURRENT_USER_PROFILE={bio:res.user.bio||'',address:res.user.address||'',barangay:res.user.barangay||'',city:res.user.city||'',country:res.user.country||'',location:res.user.location||'',hobbies:res.user.hobbies||'',skills:Array.isArray(res.user.skills)?res.user.skills:[],firstName:res.user.firstName||'',middleName:res.user.middleName||'',lastName:res.user.lastName||'',username:res.user.username||''};
+            renderSettingsAccount(true);
             if(res.passwordChangePending){
               saveBtn.disabled=false;saveBtn.innerHTML='<i class="bx bx-save"></i> Save Changes';
               toast('Profile updated. Check your email for a confirmation code.');
               promptPasswordChangeCode();
             }else{
-              closeModal();
               toast(res.passwordChangeError?('Profile updated — '+res.passwordChangeError):'Profile updated');
             }
           }else{
@@ -2716,12 +2770,144 @@ window.snippetCategory=snippetCategory;
     });
     document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeAccountMenu(); });
   }
-  const viewProfileBtn=$('#viewProfileBtn');
-  if(viewProfileBtn){
-    viewProfileBtn.addEventListener('click',()=>{
+  /* --- Settings page (?page=settings) -------------------------------------
+     Two-pane layout: a tab list on the left (Account / Appearance / Guidance /
+     Backup / About & Legal / Activity) and one pane on the right. Every pane
+     stays in the DOM (inactive ones are just `hidden`) so the existing
+     handlers for dark mode, experience level, backups, Google Drive and the
+     activity feed keep working no matter which tab is showing.
+     Account is the read-only profile summary; "Edit Profile" opens the same
+     edit modal the avatar dropdown used to open. */
+  function settingsAccountHeadHtml(){
+    const nameEl=$('.account-dropdown-name'),emailEl=$('.account-dropdown-email');
+    const curName=nameEl?nameEl.textContent.trim():'',curEmail=emailEl?emailEl.textContent.trim():'';
+    const initial=curName?curName.charAt(0).toUpperCase():'?';
+    const s=getPointsState(),rank=getRank(s.total),prog=getRankProgress(s.total);
+    const joined=window.CURRENT_USER_JOINED_AT?new Date(String(window.CURRENT_USER_JOINED_AT).replace(' ','T')):null;
+    const joinedLabel=(joined&&!isNaN(joined))?joined.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}):'—';
+    const counts={projects:store.get('projects').length,snippets:store.get('snippets').filter(x=>snippetSource(x)==='snippet').length,components:store.get('snippets').filter(x=>snippetSource(x)==='component').length,notes:store.get('notes').length};
+    return `<div class="settings-account-head">
+        <div class="settings-account-avatar account-avatar-ring ${rank.cls}"><span class="account-avatar-initial">${escapeHtml(initial)}</span><span class="account-avatar-badge"><i class="bx ${rank.icon}"></i></span></div>
+        <div class="settings-account-info">
+          <h3 class="settings-account-name">${escapeHtml(curName)}</h3>
+          <p class="muted settings-account-email">${escapeHtml(curEmail)}</p>
+          <div class="account-rank-row"><i class="bx ${rank.icon}"></i> <b>${escapeHtml(rank.tierLabel)}</b> ${rankSubBadge(rank)} <span class="muted">· ${s.total} XP</span></div>
+          <div class="xp-bar"><div class="xp-bar-fill" style="width:${prog.pct}%"></div></div>
+          <div class="xp-bar-label">${prog.next?(prog.toNext+' XP to '+escapeHtml(prog.next.label)):'Max rank reached'} · Member since ${escapeHtml(joinedLabel)}</div>
+        </div>
+        <div class="settings-account-stats">
+          <div class="profile-stat"><strong>${counts.projects}</strong><span>Projects</span></div>
+          <div class="profile-stat"><strong>${counts.snippets}</strong><span>Snippets</span></div>
+          <div class="profile-stat"><strong>${counts.components}</strong><span>Components</span></div>
+          <div class="profile-stat"><strong>${counts.notes}</strong><span>Notes</span></div>
+        </div>
+      </div>`;
+  }
+  /* `force` = leave edit mode and redraw the summary (after Save/Cancel, or when Settings is
+     reopened). Without it, XP/rank refreshes never wipe a form the person is typing in. */
+  function renderSettingsAccount(force){
+    const host=$('#settingsAccountBody');
+    if(!host)return;
+    if(host.classList.contains('editing')){
+      if(force!==true)return;
+      host.classList.remove('editing');
+    }
+    const profile=currentProfile();
+    const place=profile.location||[profile.barangay,profile.city,profile.country].filter(Boolean).join(', ');
+    const hobbies=String(profile.hobbies||'').split(',').map(t=>t.trim()).filter(Boolean);
+    const skills=(profile.skills||[]).filter(sk=>sk&&sk.name);
+    const hasAbout=!!(profile.bio||place||hobbies.length||skills.length);
+    host.innerHTML=`${settingsAccountHeadHtml()}
+      <div class="profile-view-about settings-account-about">
+        ${hasAbout?'':'<p class="muted" style="margin:0">Add a short bio, your location, hobbies and skills from Edit Profile.</p>'}
+        ${profile.bio?`<p class="profile-view-bio">${escapeHtml(profile.bio)}</p>`:''}
+        ${place?`<p class="profile-view-location muted"><i class="bx bx-map-pin"></i> ${escapeHtml(place)}</p>`:''}
+        ${hobbies.length?`<div class="profile-view-section"><span class="profile-view-label">Hobbies</span><div class="profile-tag-row">${hobbies.map(h=>`<span class="hobby-chip">${escapeHtml(h)}</span>`).join('')}</div></div>`:''}
+        ${skills.length?`<div class="profile-view-section"><span class="profile-view-label">Skills &amp; mastery</span><div class="profile-tag-row">${skills.map(sk=>`<span class="hobby-chip">${escapeHtml(sk.name)} · ${escapeHtml(sk.level||'intermediate')}</span>`).join('')}</div></div>`:''}
+      </div>
+      <button type="button" class="ghost-btn settings-edit-btn" id="settingsEditProfileBtn"><i class="bx bx-edit-alt"></i> Edit Profile</button>`;
+  }
+  window.renderSettingsAccount=renderSettingsAccount;
+
+  const settingsModal=$('#settingsModal'),settingsShell=$('#settingsShell');
+  if(settingsModal&&settingsShell){
+    const tabEls=$$('#settingsShell .settings-tab'),paneEls=$$('#settingsShell .settings-pane');
+    const TAB_IDS=tabEls.map(t=>t.dataset.tab);
+    /* Deep links (#activity, #localDiskBackup, #googleDriveBackup, #aboutLegal …)
+       pick the right tab, then scroll to the exact section inside it. */
+    const HASH_TO_TAB={localdiskbackup:'backup',googledrivebackup:'backup',aboutlegal:'about',experience:'guidance'};
+    let lastFocus=null;
+    const isOpen=()=>settingsModal.classList.contains('show');
+    function showTab(name,focus){
+      if(TAB_IDS.indexOf(name)<0)name='account';
+      tabEls.forEach(t=>{const on=t.dataset.tab===name;t.classList.toggle('active',on);t.setAttribute('aria-selected',on?'true':'false');t.tabIndex=on?0:-1;if(on&&focus)t.focus()});
+      paneEls.forEach(p=>{p.hidden=p.dataset.pane!==name});
+      const c=$('#settingsShell .settings-content');if(c)c.scrollTop=0;
+    }
+    function openSettings(hash){
+      const h=decodeURIComponent(String(hash||'').replace(/^#/,'')),key=h.toLowerCase();
+      const tab=TAB_IDS.indexOf(key)>-1?key:(HASH_TO_TAB[key]||'account');
       if(accountDropdown){accountDropdown.hidden=true;accountBtn?.setAttribute('aria-expanded','false')}
-      viewProfileForm();
+      if(!isOpen())lastFocus=document.activeElement;
+      renderSettingsAccount(true);
+      showTab(tab);
+      settingsModal.classList.add('show');settingsModal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');
+      setTimeout(()=>{
+        if(HASH_TO_TAB[key]){const t=document.getElementById(h);if(t)t.scrollIntoView({block:'start'})}
+        $('#settingsModal .settings-modal-box')?.focus({preventScroll:true});
+      },30);
+    }
+    function closeSettings(){
+      if(!isOpen())return;
+      settingsModal.classList.remove('show');settingsModal.setAttribute('aria-hidden','true');
+      if(!($('#modal')?.classList.contains('show')))document.body.classList.remove('modal-open');
+      /* Arrived via ?page=settings (e.g. the Google Drive redirect)? Drop it from the URL. */
+      try{const u=new URL(location.href);if(u.searchParams.get('page')==='settings'){u.searchParams.set('page','dashboard');u.hash='';history.replaceState(null,'',u.pathname+u.search)}}catch(e){}
+      if(lastFocus&&lastFocus.focus)lastFocus.focus();lastFocus=null;
+    }
+    window.openSettingsModal=openSettings;
+    tabEls.forEach((t,i)=>{
+      t.addEventListener('click',()=>showTab(t.dataset.tab));
+      t.addEventListener('keydown',e=>{
+        let n=-1;
+        if(e.key==='ArrowDown'||e.key==='ArrowRight')n=(i+1)%tabEls.length;
+        else if(e.key==='ArrowUp'||e.key==='ArrowLeft')n=(i-1+tabEls.length)%tabEls.length;
+        else if(e.key==='Home')n=0;
+        else if(e.key==='End')n=tabEls.length-1;
+        if(n>-1){e.preventDefault();showTab(tabEls[n].dataset.tab,true)}
+      });
     });
+    $('#settingsModalClose')?.addEventListener('click',closeSettings);
+    settingsModal.addEventListener('click',e=>{if(e.target===settingsModal)closeSettings()});
+    /* Capture phase so this runs before the generic modal's own Escape handler: if the Edit
+       Profile modal is on top, Escape closes only that one and Settings stays open. */
+    document.addEventListener('keydown',e=>{
+      if(!isOpen())return;
+      const top=$('#modal')?.classList.contains('show');
+      if(e.key==='Escape'&&!top){
+        if($('#settingsAccountBody')?.classList.contains('editing')){e.preventDefault();renderSettingsAccount(true);return}
+        closeSettings();return
+      }
+      if(e.key==='Tab'&&!top){
+        const f=$$('#settingsModal button:not([disabled]),#settingsModal a[href],#settingsModal input:not([disabled]),#settingsModal select,#settingsModal textarea,#settingsModal [tabindex="0"]').filter(x=>x.offsetParent!==null);
+        if(!f.length)return;
+        const first=f[0],last=f[f.length-1];
+        if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
+        else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
+      }
+    },true);
+    /* Every "Settings" link in the app (avatar dropdown, notification "View all", guide links)
+       opens the modal in place instead of navigating. */
+    document.addEventListener('click',e=>{
+      const a=e.target.closest&&e.target.closest('a[href*="page=settings"]');
+      if(!a||e.defaultPrevented||e.button||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+      e.preventDefault();
+      const nd=$('#notificationDropdown');if(nd)nd.hidden=true;
+      openSettings(a.hash);
+    });
+    $('#settingsAccountBody')?.addEventListener('click',e=>{if(e.target.closest('#settingsEditProfileBtn'))viewProfileForm()});
+    renderSettingsAccount();
+    if(window.OPEN_SETTINGS)openSettings(location.hash);
   }
   const logoutBtn=$('#logoutBtn');
   if(logoutBtn){
@@ -2774,4 +2960,23 @@ window.snippetCategory=snippetCategory;
       banner.textContent='You will be signed out in '+secs+'s because of inactivity. Move the mouse or press a key to stay signed in.';
     }else hideBanner();
   },1000);
+})();
+
+/* --- Sidebar "Internet Connection" card: follows the browser's online/offline state. The app is
+   local-first, so going offline is informational — work keeps saving to this computer. --- */
+(function(){
+  const box=document.getElementById('netStatus');
+  if(!box)return;
+  const icon=document.getElementById('netStatusIcon');
+  let last=null;
+  function apply(online,announce){
+    box.classList.toggle('is-offline',!online);
+    if(icon)icon.className='bx '+(online?'bx-wifi':'bx-wifi-off');
+    box.title='Internet Connection: '+(online?'Connected':'Offline');
+    if(announce&&last!==null&&last!==online)toast(online?'Back online':'You\u2019re offline \u2014 your work still saves on this computer.');
+    last=online;
+  }
+  apply(navigator.onLine!==false,false);
+  window.addEventListener('online',()=>apply(true,true));
+  window.addEventListener('offline',()=>apply(false,true));
 })();
